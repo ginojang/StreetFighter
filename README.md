@@ -318,6 +318,9 @@ During the development of the game, the following websites and applications were
 
 By leveraging these resources, the game development process was enriched with high-quality graphics and audio elements, contributing to the overall immersion and enjoyment of the gaming experience.
 
+## Interesting Community Forks to checkout
+1. @vm10k - https://github.com/vm10k/SFA-Multiplayer
+
 ## Contributing
 
 If you would like to contribute to the project, feel free to open an issue or submit a pull request. Any contributions are welcome!
