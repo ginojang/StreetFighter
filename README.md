@@ -312,6 +312,9 @@ During the development of the game, the following websites and applications were
 3. **The Sounds Resource** (https://www.sounds-resource.com/):
    - **Description**: The Sounds Resource is an online platform offering a vast collection of video game sounds, music tracks, and audio clips extracted from numerous video games.
    - **Usage**: The Sounds Resource was utilized to acquire sound effects, background music, and other audio assets to enhance the auditory experience of the game. It provided access to a diverse selection of sounds suitable for various in-game actions, events, and interactions.
+  
+4. **Youtube Referene** (https://www.youtube.com/@shezzor):
+    - Huge shoutout to @shezzor whose youtube playlist for this js development to which i refered to for learning.  
 
 By leveraging these resources, the game development process was enriched with high-quality graphics and audio elements, contributing to the overall immersion and enjoyment of the gaming experience.
 
