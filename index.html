@@ -1,10 +1,23 @@
 <!DOCTYPE html>
 <html lang="en">
 	<head>
-		<link rel="icon" href="./public/images/vsLogo.png" />
 		<meta charset="UTF-8" />
+		<!-- 슬래시 유무와 무관하게 상대경로 에셋이 /street_fighter/ 기준으로 로드되도록 -->
+		<base href="/street_fighter/" />
+		<link rel="icon" href="./public/images/vsLogo.png" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>Street Fighter by Mayank Jain</title>
+		<title>Street Fighter</title>
+		<meta name="description" content="Classic arcade-style Street Fighter — play Ken vs Ryu right in your browser." />
+
+		<!-- Open Graph / KakaoTalk / SNS 링크 미리보기 -->
+		<meta property="og:type" content="website" />
+		<meta property="og:title" content="Street Fighter" />
+		<meta property="og:description" content="Classic arcade-style Street Fighter — play Ken vs Ryu right in your browser." />
+		<meta property="og:url" content="https://elda-ai.org/street_fighter/" />
+		<meta property="og:image" content="https://elda-ai.org/street_fighter/public/images/gameplay.png" />
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:title" content="Street Fighter" />
+		<meta name="twitter:description" content="Classic arcade-style Street Fighter — play Ken vs Ryu right in your browser." />
 		<link rel="stylesheet" href="src/style.css" />
 		<script type="module" src="src/index.js"></script>
 	</head>
@@ -82,7 +95,7 @@
 
 		<img id="KenStage" src="public/images/kenstage.png" alt="kenstage" />
 		<img id="hud" src="public/images/hud.png" alt="HUD" />
-		<img id="KenImage" src="./public/images/ken.png" />
+		<img id="KenImage" src="./public/images/Ken.png" />
 		<img id="RyuImage" src="public/images/Ryu.png" />
 		<img id="ShadowImage" src="./public/images/shadow.png" />
 		<img id="Decals" src="./public/images/decals.png" />
