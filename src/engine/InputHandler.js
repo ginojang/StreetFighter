@@ -1,6 +1,7 @@
 import { CONTROLLER_DEADZONE, controls } from '../config/controls.js';
 import { Control } from '../constants/controls.js';
 import { FighterDirection } from '../constants/fighter.js';
+import { CONTROL_ORDER, encodeControls, isControlSet } from '../net/InputCodec.js';
 
 const mappedButtons = new Set(
 	controls.map(({ gamepad }) => Object.values(gamepad)).flat()
@@ -209,4 +210,59 @@ export const isMediumKick = (id, forControlHistory = false) => {
 };
 export const isHeavyKick = (id, forControlHistory = false) => {
 	return isKeyPressed(id, Control.HEAVY_KICK, forControlHistory);
+};
+
+// ============================================================
+// Netplay seam (호스트-권위 P2P)
+// 원본 입력 파이프라인은 그대로 두고, 원격 입력을 게임 플레이어 슬롯에
+// "주입"하는 최소 접점만 추가한다. 상태머신은 여전히 전역 held/pressed
+// Set만 읽으므로, 이 Set을 올바르게 유지하면 기존 로직이 그대로 작동한다.
+// ============================================================
+
+const directionCheck = {
+	[Control.LEFT]: isLeft,
+	[Control.RIGHT]: isRight,
+	[Control.UP]: isUp,
+	[Control.DOWN]: isDown,
+};
+
+// 로컬 하드웨어에서 특정 컨트롤이 눌려 있는지 (키보드 + 게임패드 버튼 + 축).
+const isControlHeldLocally = (controlIndex, control) => {
+	if (directionCheck[control]) return directionCheck[control](controlIndex);
+	return (
+		heldKeys.has(controls[controlIndex].keyboard[control]) ||
+		heldGamepadButtons[controlIndex].has(controls[controlIndex].gamepad[control])
+	);
+};
+
+/**
+ * 로컬 플레이어의 현재 입력을 와이어 비트마스크로 캡처한다 (게스트가 매 프레임 호출).
+ * @param {number} controlIndex 로컬 조작에 쓰는 컨트롤 매핑 인덱스 (기본 0 = WASD)
+ * @returns {number} 10비트 입력 마스크
+ */
+export const readLocalInputBits = (controlIndex = 0) => {
+	const state = {};
+	for (const control of CONTROL_ORDER) {
+		state[control] = isControlHeldLocally(controlIndex, control);
+	}
+	return encodeControls(state);
+};
+
+/**
+ * 원격에서 받은 입력 비트마스크를 게임 플레이어 슬롯에 주입한다 (호스트가 매 프레임 호출).
+ * keydown/keyup 핸들러와 동일하게 held/pressed Set을 갱신해 엣지 감지까지 보존한다.
+ * @param {number} gamePlayerId 주입 대상 게임 플레이어 (호스트에선 보통 1)
+ * @param {number} bits readLocalInputBits로 인코딩된 10비트 마스크
+ */
+export const applyRemoteInput = (gamePlayerId, bits) => {
+	for (const control of CONTROL_ORDER) {
+		const keyCode = controls[gamePlayerId].keyboard[control];
+		if (isControlSet(bits, control)) {
+			heldKeys.add(keyCode);
+		} else if (heldKeys.has(keyCode)) {
+			heldKeys.delete(keyCode);
+			pressedKeys.delete(keyCode);
+			pressedKeysControlHistory[gamePlayerId].delete(keyCode);
+		}
+	}
 };
