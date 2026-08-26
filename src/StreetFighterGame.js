@@ -20,6 +20,7 @@ export class StreetFighterGame {
 	timeStarted = 0;
 	sceneStarted = false;
 	nextScene = undefined;
+	netSession = undefined; // 넷플레이 활성 시 주입 (bootNetplay). 기본 로컬 플레이엔 영향 없음.
 
 	contextHandler = new ContextHandler(this.context);
 
@@ -60,6 +61,8 @@ export class StreetFighterGame {
 			previous: time,
 		};
 		updateGamePads();
+		// 넷플레이: 시뮬(scene.update)이 입력을 읽기 전에 원격 입력을 주입/송신.
+		this.netSession?.update();
 		this.contextHandler.update(this.frameTime);
 		this.context.filter = `brightness(${this.contextHandler.brightness}) contrast(${this.contextHandler.contrast})`;
 		this.updateScenes();
