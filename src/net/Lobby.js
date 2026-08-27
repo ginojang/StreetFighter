@@ -52,6 +52,33 @@ export const buildJoinLink = (loc, room, signalUrl) => {
 	return `${base}?${params.toString()}`;
 };
 
+/**
+ * 기본 ICE 설정에 사용자가 입력한 TURN 중계를 합친다(있을 때만).
+ * TURN 자격증명은 런타임 입력값일 뿐 — 저장소엔 절대 남기지 않는다.
+ */
+export const mergeTurn = (rtcConfig, turn) => {
+	const iceServers = [...(rtcConfig?.iceServers ?? [])];
+	if (turn && turn.url) {
+		iceServers.push({
+			urls: turn.url,
+			username: turn.username || '',
+			credential: turn.credential || '',
+		});
+	}
+	return { ...(rtcConfig || {}), iceServers };
+};
+
+/** 실패 사유 → 사용자 안내(직접 연결 실패는 TURN을 권한다). */
+export const failText = (reason) =>
+	({
+		timeout:
+			'연결 시간 초과 — 상대와 직접 연결이 안 됩니다. 아래 고급 설정에서 TURN 서버를 지정해 보세요.',
+		'ice-failed':
+			'연결 실패(NAT/방화벽) — 고급 설정에서 TURN 서버를 지정해 보세요.',
+		'connection-failed':
+			'연결이 끊겼습니다 — 고급 설정에서 TURN 서버를 지정해 보세요.',
+	})[reason] || `연결 실패: ${reason}`;
+
 // ── 오버레이 ─────────────────────────────────────────────────────────────
 
 const STYLE_ID = 'sfnp-style';
@@ -82,6 +109,10 @@ const STYLE = `
 .sfnp-close:hover{color:#fff;}
 .sfnp-mt{margin-top:10px;}
 .sfnp-dim{color:#8a8271;font-size:10px;text-align:center;margin-top:12px;letter-spacing:1px;}
+.sfnp-adv{margin-top:4px;border-top:1px solid #2a2418;padding-top:6px;}
+.sfnp-adv summary{cursor:pointer;font-size:10px;letter-spacing:1px;color:#8a8271;text-transform:uppercase;padding:6px 0;list-style:none;}
+.sfnp-adv summary:hover{color:#c9c2b4;}
+.sfnp-adv summary::-webkit-details-marker{display:none;}
 `;
 
 const injectStyle = () => {
@@ -188,6 +219,41 @@ export const openLobby = (game, { signalUrl, rtcConfig, prefillRoom } = {}) => {
 
 	const currentSignal = () => signalField.value.trim();
 
+	// 고급: TURN 중계 (대칭형 NAT 등 직접 연결 실패 시). 값은 런타임 전용, 커밋 금지.
+	const turnUrlField = el('input', {
+		class: 'sfnp-field',
+		placeholder: 'turn:호스트:3478',
+	});
+	const turnUserField = el('input', { class: 'sfnp-field', placeholder: 'username' });
+	const turnCredField = el('input', {
+		class: 'sfnp-field',
+		type: 'password',
+		placeholder: 'credential',
+	});
+	const currentRtcConfig = () =>
+		mergeTurn(rtcConfig, {
+			url: turnUrlField.value.trim(),
+			username: turnUserField.value.trim(),
+			credential: turnCredField.value.trim(),
+		});
+	const advancedSection = () =>
+		el('details', { class: 'sfnp-adv' }, [
+			el('summary', { text: '고급: TURN 중계 (연결 안 될 때)' }),
+			el('div', { class: 'sfnp-mt' }, [
+				el('span', { class: 'sfnp-label', text: 'TURN URL' }),
+				turnUrlField,
+			]),
+			el('div', { class: 'sfnp-mt' }, [
+				el('span', { class: 'sfnp-label', text: 'TURN 사용자/자격증명' }),
+				turnUserField,
+				el('div', { class: 'sfnp-mt' }, [turnCredField]),
+			]),
+			el('p', {
+				class: 'sfnp-dim',
+				text: '자격증명은 이 브라우저에만 쓰입니다 (저장·전송 안 함).',
+			}),
+		]);
+
 	// ── 뷰: 메뉴 ──
 	const showMenu = () => {
 		teardown();
@@ -212,6 +278,7 @@ export const openLobby = (game, { signalUrl, rtcConfig, prefillRoom } = {}) => {
 					text: '코드로 참가',
 					onclick: showJoin,
 				}),
+				advancedSection(),
 			]),
 			el('p', {
 				class: 'sfnp-dim',
@@ -300,10 +367,14 @@ export const openLobby = (game, { signalUrl, rtcConfig, prefillRoom } = {}) => {
 		showCreated(room, status);
 
 		const signaling = new SignalingClient({ url, room, intent: 'create' });
-		createMatchmadeConnection({ signaling, rtcConfig })
+		createMatchmadeConnection({ signaling, rtcConfig: currentRtcConfig() })
 			.then(({ connection, role }) => {
 				active = { signaling, connection };
 				wire(connection, role); // host — onOpen에서 오버레이 닫힘
+				connection.onFail((reason) => {
+					status.className = 'sfnp-status sfnp-err';
+					status.textContent = failText(reason);
+				});
 			})
 			.catch((err) => {
 				status.className = 'sfnp-status sfnp-err';
@@ -328,10 +399,14 @@ export const openLobby = (game, { signalUrl, rtcConfig, prefillRoom } = {}) => {
 		status.textContent = '연결 중…';
 
 		const signaling = new SignalingClient({ url, room, intent: 'join' });
-		createMatchmadeConnection({ signaling, rtcConfig })
+		createMatchmadeConnection({ signaling, rtcConfig: currentRtcConfig() })
 			.then(({ connection, role }) => {
 				active = { signaling, connection };
 				wire(connection, role); // guest — onOpen에서 오버레이 닫힘
+				connection.onFail((reason) => {
+					status.className = 'sfnp-status sfnp-err';
+					status.textContent = failText(reason);
+				});
 			})
 			.catch((err) => {
 				status.className = 'sfnp-status sfnp-err';

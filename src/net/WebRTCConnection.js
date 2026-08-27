@@ -17,9 +17,11 @@ export class WebRTCConnection {
 	#pc;
 	#channel = null;
 	#open = false;
+	#failed = false;
 	#messageHandlers = [];
 	#openHandlers = [];
 	#closeHandlers = [];
+	#failHandlers = [];
 
 	constructor(pc) {
 		this.#pc = pc;
@@ -72,8 +74,25 @@ export class WebRTCConnection {
 		return this;
 	}
 
+	/**
+	 * 연결 수립 실패/유실 시 호출 (reason: 'timeout'|'ice-failed'|'connection-failed').
+	 * 직접 P2P가 안 되는 경우(대칭형 NAT/방화벽)를 UI가 감지해 TURN을 안내하는 용도.
+	 */
+	onFail(handler) {
+		this.#failHandlers.push(handler);
+		return this;
+	}
+
+	// 내부: 실패를 한 번만 통지. 정상 close 이후엔 억제.
+	_fail(reason) {
+		if (this.#failed || this.#open) return;
+		this.#failed = true;
+		for (const handler of this.#failHandlers) handler(reason);
+	}
+
 	close() {
 		this.#open = false;
+		this.#failed = true; // 수동 종료 후 늦은 실패 이벤트 억제
 		try {
 			this.#channel?.close();
 		} catch {
@@ -89,6 +108,7 @@ export class WebRTCConnection {
 }
 
 const DEFAULT_ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+const CONNECT_TIMEOUT_MS = 15000; // 이 시간 안에 DataChannel이 안 열리면 실패로 간주
 
 /**
  * 시그널링을 통해 WebRTC 협상을 수행하고, 열리면 동작하는 WebRTCConnection을 반환.
@@ -114,6 +134,7 @@ export const createWebRTCConnection = ({
 	rtcConfig = { iceServers: DEFAULT_ICE_SERVERS },
 	pcFactory = (config) => new RTCPeerConnection(config),
 	channelName = 'game',
+	connectTimeoutMs = CONNECT_TIMEOUT_MS,
 }) => {
 	const pc = pcFactory(rtcConfig);
 	const conn = new WebRTCConnection(pc);
@@ -126,6 +147,22 @@ export const createWebRTCConnection = ({
 			signaling.send({ t: 'candidate', candidate: event.candidate });
 		}
 	};
+
+	// 직접 P2P 수립 실패 감지: 상태가 'failed'거나 제한 시간 내 미개통이면 onFail.
+	// ('disconnected'는 일시적일 수 있어 무시 — 죽으면 'failed'로 넘어온다.)
+	pc.onconnectionstatechange = () => {
+		if (pc.connectionState === 'failed') conn._fail('connection-failed');
+	};
+	pc.oniceconnectionstatechange = () => {
+		if (pc.iceConnectionState === 'failed') conn._fail('ice-failed');
+	};
+	if (connectTimeoutMs > 0) {
+		const timer = setTimeout(() => {
+			if (!conn.isOpen) conn._fail('timeout');
+		}, connectTimeoutMs);
+		conn.onOpen(() => clearTimeout(timer));
+		conn.onFail(() => clearTimeout(timer));
+	}
 
 	const drainCandidates = async () => {
 		remoteSet = true;
