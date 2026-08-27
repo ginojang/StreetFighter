@@ -5,6 +5,7 @@ import {
 	inputMessage,
 	pongMessage,
 } from './protocol.js';
+import { serializeBattleState, applyBattleState } from './StateCodec.js';
 
 export const NetRole = {
 	HOST: 'host', // 시뮬 실행 + 게스트 입력을 원격 슬롯에 주입 (권위)
@@ -43,8 +44,12 @@ export class NetSession {
 
 		this.frame = 0;
 		this.remoteBits = 0; // 호스트: 마지막으로 알려진 게스트 입력
-		this.remoteFrame = -1; // 지금까지 본 가장 큰 프레임 (순서 뒤바뀐 패킷 폐기용)
+		this.remoteFrame = -1; // 지금까지 본 가장 큰 입력 프레임 (순서 뒤바뀐 패킷 폐기용)
 		this.rtt = null; // 왕복 지연(ms), PONG 수신 시 갱신
+
+		this.stateSeq = 0; // 호스트: 보낸 STATE 스냅샷 시퀀스
+		this.latestState = null; // 게스트: 가장 최신 STATE 스냅샷
+		this.latestStateSeq = -1; // 게스트: 지금까지 본 가장 큰 STATE 시퀀스
 
 		this.connection.onMessage((raw) => this._onMessage(raw));
 	}
@@ -70,8 +75,27 @@ export class NetSession {
 			case MessageType.PONG:
 				this.rtt = this.now() - msg.s;
 				break;
-			// MessageType.STATE 는 Phase 1(상태 스트리밍)에서 처리
+			case MessageType.STATE:
+				// 게스트: 순서 뒤바뀐 스냅샷 폐기, 최신만 유지.
+				if (msg.f > this.latestStateSeq) {
+					this.latestStateSeq = msg.f;
+					this.latestState = msg;
+				}
+				break;
 		}
+	}
+
+	/** HOST: 시뮬(scene.update) 이후 호출 — 현재 배틀 상태를 스냅샷으로 전송. */
+	sendState(scene, gameState) {
+		if (!this.connection.isOpen) return;
+		this.connection.send(
+			encode(serializeBattleState(scene, gameState, this.stateSeq++))
+		);
+	}
+
+	/** GUEST: 매 프레임 그리기 직전 호출 — 최신 스냅샷을 로컬 씬에 적용. */
+	applyLatestState(scene, gameState) {
+		if (this.latestState) applyBattleState(scene, gameState, this.latestState);
 	}
 
 	/** 게임 루프에서 매 프레임 1회, 시뮬(scene.update)보다 먼저 호출. */

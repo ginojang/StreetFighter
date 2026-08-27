@@ -8,6 +8,7 @@ import { BattleScene } from './scenes/BattleScene.js';
 import { GAME_SPEED } from './constants/game.js';
 import { StartScene } from './scenes/StartScene.js';
 import { ContextHandler } from './engine/ContextHandler.js';
+import { gameState } from './states/gameState.js';
 
 export class StreetFighterGame {
 	context = getContext();
@@ -21,6 +22,7 @@ export class StreetFighterGame {
 	sceneStarted = false;
 	nextScene = undefined;
 	netSession = undefined; // 넷플레이 활성 시 주입 (bootNetplay). 기본 로컬 플레이엔 영향 없음.
+	mode = 'local'; // 'local' | 'host' | 'guest'
 
 	contextHandler = new ContextHandler(this.context);
 
@@ -41,10 +43,24 @@ export class StreetFighterGame {
 	}
 
 	updateScenes = () => {
+		// 게스트(렌더 전용): 그리기 직전 최신 스냅샷을 적용 (배틀 씬일 때만).
+		if (this.mode === 'guest' && this.scene.fighters) {
+			this.netSession.applyLatestState(this.scene, gameState);
+		}
+
 		this.scene.draw(this.context);
 		if (this.contextHandler.dimDown) return;
 		if (!this.sceneStarted) this.startScene(this.nextScene);
+
+		// 게스트는 시뮬을 돌리지 않는다.
+		if (this.mode === 'guest') return;
+
 		this.scene.update(this.frameTime);
+
+		// 호스트: 시뮬 후 상태를 게스트로 전송 (배틀 씬일 때만).
+		if (this.mode === 'host' && this.scene.fighters) {
+			this.netSession.sendState(this.scene, gameState);
+		}
 	};
 
 	frame = (time) => {

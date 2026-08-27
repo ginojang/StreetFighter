@@ -92,3 +92,56 @@ export class LoopbackConnection {
 		if (this.#peer && this.#peer.#open) this.#peer.close();
 	}
 }
+
+/**
+ * 같은 오리진의 두 탭/창을 잇는 전송 (BroadcastChannel 기반).
+ * 시그널링 서버도 WebRTC도 없이 단일 PC에서 실제 2-탭 대전을 검증할 수 있다.
+ * (BroadcastChannel은 보낸 쪽 자신에게는 에코하지 않음 → 호스트/게스트 분리에 적합)
+ * Connection 인터페이스가 동일하므로 Phase 2의 WebRTCConnection이 그대로 대체 가능.
+ */
+export class BroadcastChannelConnection {
+	#channel;
+	#messageHandlers = [];
+	#openHandlers = [];
+	#closeHandlers = [];
+	#open = false;
+
+	constructor(name = 'streetfighter-net') {
+		this.#channel = new BroadcastChannel(name);
+		this.#channel.onmessage = (event) => {
+			for (const handler of this.#messageHandlers) handler(event.data);
+		};
+		this.#open = true;
+	}
+
+	get isOpen() {
+		return this.#open;
+	}
+
+	send(data) {
+		if (this.#open) this.#channel.postMessage(data);
+	}
+
+	onMessage(handler) {
+		this.#messageHandlers.push(handler);
+		return this;
+	}
+
+	onOpen(handler) {
+		this.#openHandlers.push(handler);
+		if (this.#open) handler();
+		return this;
+	}
+
+	onClose(handler) {
+		this.#closeHandlers.push(handler);
+		return this;
+	}
+
+	close() {
+		if (!this.#open) return;
+		this.#open = false;
+		this.#channel.close();
+		for (const handler of this.#closeHandlers) handler();
+	}
+}

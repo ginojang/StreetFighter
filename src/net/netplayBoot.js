@@ -1,31 +1,75 @@
 import { NetSession, NetRole } from './NetSession.js';
-import { LoopbackConnection } from './Connection.js';
+import { LoopbackConnection, BroadcastChannelConnection } from './Connection.js';
 import { CONTROL_BIT } from './InputCodec.js';
 import { readLocalInputBits, applyRemoteInput } from '../engine/InputHandler.js';
 import { Control } from '../constants/controls.js';
+import { BattleScene } from '../scenes/BattleScene.js';
 
 /**
  * 넷플레이 부트스트랩. URL 파라미터가 없으면 아무 것도 하지 않으므로
  * 일반 로컬 플레이는 전혀 영향받지 않는다.
  *
- * ?net=hostdemo  단일 PC 데모: 인메모리 루프백으로 "스크립트 게스트"의 입력을
- *                호스트가 받아 게임 P1(Ryu)에 주입한다. 매치를 시작하면 Ryu가
- *                네트워크 입력만으로 스스로 움직이는 것으로 전 경로(전송+세션+주입)를
- *                눈으로 확인할 수 있다. 실제 인터넷 조건 흉내:
- *                  ?net=hostdemo&latency=60&loss=0.05
+ * 모드 (?net=...):
+ *   hostdemo  단일 PC·단일 탭 데모: 인메모리 루프백 + "스크립트 게스트"가 P1(Ryu)을
+ *             자동 조작. 전 경로(전송+세션+입력주입) 눈으로 확인. 인터넷 조건 흉내:
+ *               ?net=hostdemo&latency=60&loss=0.05
+ *   host      실제 2-탭 대전의 호스트. 시뮬 실행 + 상태 전송, P1은 게스트가 조작.
+ *   guest     실제 2-탭 대전의 게스트. 렌더 전용 — 호스트 상태를 그리고 WASD 전송.
  *
- * (WebRTC 전송과 실제 2인 매칭은 Phase 2에서 같은 인터페이스로 드롭인 예정)
+ * host/guest는 BroadcastChannel(같은 오리진 두 탭)로 연결된다. 방 이름은 ?room=..., 기본
+ * 'streetfighter-net'. 두 탭을 같은 room으로 열면 붙는다.
+ * (WebRTC 전송·실제 원격 매칭은 Phase 2에서 같은 Connection 인터페이스로 드롭인)
  */
 export const bootNetplay = (game) => {
 	const params = new URLSearchParams(location.search);
 	const mode = params.get('net');
 	if (!mode) return;
 
-	if (mode === 'hostdemo') {
-		startHostDemo(game, params);
-	} else {
-		console.warn(`[netplay] 알 수 없는 net 모드: "${mode}"`);
+	switch (mode) {
+		case 'hostdemo':
+			return startHostDemo(game, params);
+		case 'host':
+			return startHost(game, params);
+		case 'guest':
+			return startGuest(game, params);
+		default:
+			console.warn(`[netplay] 알 수 없는 net 모드: "${mode}"`);
 	}
+};
+
+const roomName = (params) => params.get('room') ?? 'streetfighter-net';
+
+// 실제 2-탭 호스트: 시뮬 실행 + 상태 전송, 게스트 입력을 P1에 주입.
+const startHost = (game, params) => {
+	const connection = new BroadcastChannelConnection(roomName(params));
+	game.mode = 'host';
+	game.netSession = new NetSession({
+		role: NetRole.HOST,
+		connection,
+		io: realIo,
+		remotePlayerId: 1,
+	});
+	console.log(
+		`[netplay] host (room=${roomName(params)}). 매치를 시작하세요. ` +
+			`P1(Ryu)은 게스트 탭이 조작합니다.`
+	);
+};
+
+// 실제 2-탭 게스트: 렌더 전용. 호스트 상태를 그리고 로컬 WASD를 전송.
+const startGuest = (game, params) => {
+	const connection = new BroadcastChannelConnection(roomName(params));
+	game.mode = 'guest';
+	game.netSession = new NetSession({
+		role: NetRole.GUEST,
+		connection,
+		io: realIo,
+		localPlayerIndex: 0, // 게스트는 로컬에서 P0 키(WASD)로 조작
+	});
+	game.startScene(BattleScene); // 메뉴 대신 바로 배틀 화면(렌더 대상)으로
+	console.log(
+		`[netplay] guest (room=${roomName(params)}). 호스트 화면을 렌더링합니다. ` +
+			`WASD+QERFVG로 P1을 조작하세요.`
+	);
 };
 
 // 로컬 InputHandler를 NetSession io 어댑터로 노출.
