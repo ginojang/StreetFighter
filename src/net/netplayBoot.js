@@ -9,6 +9,7 @@ import {
 	createWebRTCConnection,
 	createMatchmadeConnection,
 } from './WebRTCConnection.js';
+import { openLobby, defaultSignalUrl } from './Lobby.js';
 
 /**
  * 넷플레이 부트스트랩. URL 파라미터가 없으면 아무 것도 하지 않으므로
@@ -23,6 +24,8 @@ import {
  *   create    매치메이킹: 방을 만들고(서버가 host 배정) 방 코드를 발급. WebRTC 전용.
  *             ?room= 생략 시 코드 자동 생성(콘솔에 출력). ?signal= 필수.
  *   join      매치메이킹: 방 코드로 참가(서버가 guest 배정). ?room=코드 + ?signal= 필수.
+ *   lobby     온라인 로비 UI(HTML 오버레이). 방 만들기/코드 참가를 화면에서. URL 불요.
+ *             ?signal= 생략 시 현재 위치에서 기본 추정. ?room=코드면 참가 화면으로 시작.
  *
  * 전송 선택 (?transport=...):
  *   broadcast (기본)  BroadcastChannel — 같은 PC 두 탭. 서버·인터넷 불필요.
@@ -52,6 +55,12 @@ export const bootNetplay = (game) => {
 			return startMatchmaking(game, params, 'create');
 		case 'join':
 			return startMatchmaking(game, params, 'join');
+		case 'lobby':
+			return openLobby(game, {
+				signalUrl: params.get('signal') ?? defaultSignalUrl(location),
+				rtcConfig: buildRtcConfig(params),
+				prefillRoom: params.get('room'),
+			});
 		default:
 			console.warn(`[netplay] 알 수 없는 net 모드: "${mode}"`);
 	}
