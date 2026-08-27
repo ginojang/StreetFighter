@@ -44,10 +44,18 @@ server.on('upgrade', (req, socket) => {
 
 	const url = new URL(req.url, 'http://localhost');
 	const room = url.searchParams.get('room');
-	const role = url.searchParams.get('role');
-	if (!room || (role !== 'host' && role !== 'guest')) {
+	const explicitRole = url.searchParams.get('role');
+	const intent = url.searchParams.get('intent');
+	const hasRole = explicitRole === 'host' || explicitRole === 'guest';
+	const hasIntent = intent === 'create' || intent === 'join';
+	// 접속은 두 방식 중 하나:
+	//   role=host|guest  (레거시 · 직접 URL) — 클라이언트가 역할을 스스로 정함
+	//   intent=create|join (매치메이킹)     — 서버가 방을 만들거나(=host) 참가시키며(=guest)
+	//                                        역할을 배정하고 'assigned'로 통지
+	if (!room || (!hasRole && !hasIntent)) {
 		socket.write(
-			'HTTP/1.1 400 Bad Request\r\n\r\nroom 과 role(host|guest)이 필요합니다'
+			'HTTP/1.1 400 Bad Request\r\n\r\n' +
+				'room 과 role(host|guest) 또는 intent(create|join)가 필요합니다'
 		);
 		socket.destroy();
 		return;
@@ -67,17 +75,51 @@ server.on('upgrade', (req, socket) => {
 	socket.setNoDelay(true);
 
 	const slot = rooms.get(room) ?? { host: null, guest: null };
-	if (slot[role]) {
-		// 같은 역할이 이미 있음 → 거절
-		sendFrame(socket, JSON.stringify({ t: 'error', reason: 'role-taken' }));
-		socket.end();
-		return;
+
+	// 역할 결정 + 방 규칙 검증. 실패 시 WS 에러 프레임 후 종료.
+	let role;
+	if (hasRole) {
+		role = explicitRole;
+		if (slot[role]) {
+			sendFrame(socket, JSON.stringify({ t: 'error', reason: 'role-taken' }));
+			socket.end();
+			return;
+		}
+	} else if (intent === 'create') {
+		if (slot.host) {
+			// 이미 존재하는 방 코드로 생성 시도
+			sendFrame(socket, JSON.stringify({ t: 'error', reason: 'room-exists' }));
+			socket.end();
+			return;
+		}
+		role = 'host';
+	} else {
+		// intent === 'join'
+		if (!slot.host) {
+			sendFrame(
+				socket,
+				JSON.stringify({ t: 'error', reason: 'room-not-found' })
+			);
+			socket.end();
+			return;
+		}
+		if (slot.guest) {
+			sendFrame(socket, JSON.stringify({ t: 'error', reason: 'room-full' }));
+			socket.end();
+			return;
+		}
+		role = 'guest';
 	}
+
 	slot[role] = socket;
 	rooms.set(room, slot);
 	socket._room = room;
 	socket._role = role;
-	log(`join room=${room} role=${role}`);
+	// 매치메이킹 접속엔 배정된 역할을 통지 (레거시 role= 접속은 이미 역할을 앎).
+	if (hasIntent) {
+		sendFrame(socket, JSON.stringify({ t: 'assigned', role, room }));
+	}
+	log(`join room=${room} role=${role}${hasIntent ? ` (${intent})` : ''}`);
 
 	const peerRole = role === 'host' ? 'guest' : 'host';
 	// 양쪽이 다 모이면 둘 다에게 'ready' → 호스트가 offer 생성 시작

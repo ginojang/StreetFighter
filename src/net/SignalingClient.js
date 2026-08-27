@@ -19,29 +19,39 @@ export class SignalingClient {
 	#url;
 	#room;
 	#role;
+	#intent;
 	#signalHandlers = [];
 	#readyHandlers = [];
+	#assignedHandlers = [];
+	#errorHandlers = [];
 	#closeHandlers = [];
 
 	/**
+	 * 접속 방식은 둘 중 하나(role 또는 intent):
+	 *   role  : 'host'|'guest' 를 직접 지정 (레거시/직접 URL)
+	 *   intent: 'create'|'join' — 서버가 역할을 배정하고 onAssigned로 통지 (매치메이킹)
 	 * @param {Object} opts
-	 * @param {string} opts.url   시그널링 서버 URL (ws:// 또는 wss://)
-	 * @param {string} opts.room  방 이름 (두 피어가 같은 값으로 만나야 붙는다)
-	 * @param {'host'|'guest'} opts.role
+	 * @param {string} opts.url    시그널링 서버 URL (ws:// 또는 wss://)
+	 * @param {string} opts.room   방 이름/코드 (두 피어가 같은 값으로 만나야 붙는다)
+	 * @param {'host'|'guest'} [opts.role]
+	 * @param {'create'|'join'} [opts.intent]
 	 */
-	constructor({ url, room, role }) {
+	constructor({ url, room, role, intent }) {
 		this.#url = url;
 		this.#room = room;
 		this.#role = role;
+		this.#intent = intent;
 	}
 
-	/** WebSocket 연결. onSignal/onReady 핸들러는 connect() 전에 등록해야 유실이 없다. */
+	/** WebSocket 연결. 핸들러(onSignal/onReady/onAssigned/onError)는 connect() 전에 등록. */
 	connect() {
 		return new Promise((resolve, reject) => {
 			const sep = this.#url.includes('?') ? '&' : '?';
+			const auth = this.#intent
+				? `intent=${encodeURIComponent(this.#intent)}`
+				: `role=${encodeURIComponent(this.#role)}`;
 			const url =
-				`${this.#url}${sep}room=${encodeURIComponent(this.#room)}` +
-				`&role=${encodeURIComponent(this.#role)}`;
+				`${this.#url}${sep}room=${encodeURIComponent(this.#room)}&${auth}`;
 			this.#ws = new WebSocket(url);
 			this.#ws.onopen = () => resolve();
 			this.#ws.onerror = (event) => reject(event);
@@ -57,6 +67,11 @@ export class SignalingClient {
 				}
 				if (msg.t === 'ready') {
 					for (const handler of this.#readyHandlers) handler();
+				} else if (msg.t === 'assigned') {
+					this.#role = msg.role;
+					for (const handler of this.#assignedHandlers) handler(msg.role, msg.room);
+				} else if (msg.t === 'error') {
+					for (const handler of this.#errorHandlers) handler(msg.reason);
 				} else {
 					for (const handler of this.#signalHandlers) handler(msg);
 				}
@@ -78,6 +93,18 @@ export class SignalingClient {
 
 	onReady(handler) {
 		this.#readyHandlers.push(handler);
+		return this;
+	}
+
+	/** 매치메이킹: 서버가 역할을 배정하면 호출 (role, room). */
+	onAssigned(handler) {
+		this.#assignedHandlers.push(handler);
+		return this;
+	}
+
+	/** 서버 에러 통지 (reason: 'room-exists'|'room-not-found'|'room-full'|'role-taken'). */
+	onError(handler) {
+		this.#errorHandlers.push(handler);
 		return this;
 	}
 

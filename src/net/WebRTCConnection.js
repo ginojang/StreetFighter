@@ -187,3 +187,45 @@ export const createWebRTCConnection = ({
 
 	return conn;
 };
+
+/**
+ * 매치메이킹 연결: 역할을 서버가 배정한다. 시그널링에 create/join 의도로 접속해
+ * 'assigned'를 받은 시점에 그 역할로 WebRTCConnection을 만든다.
+ *
+ * onAssigned 안에서 createWebRTCConnection이 onSignal/onReady를 동기 등록하므로,
+ * 뒤이어 오는 offer/ready 메시지를 놓치지 않는다(WS 메시지는 순서 보장).
+ *
+ * @returns {Promise<{ connection: WebRTCConnection, role: 'host'|'guest' }>}
+ *          방 규칙 위반 시('room-exists'|'room-not-found'|'room-full'…) reject.
+ */
+export const createMatchmadeConnection = ({
+	signaling,
+	rtcConfig,
+	pcFactory,
+	channelName,
+}) =>
+	new Promise((resolve, reject) => {
+		let settled = false;
+		signaling.onAssigned((role) => {
+			if (settled) return;
+			settled = true;
+			const connection = createWebRTCConnection({
+				role,
+				signaling,
+				rtcConfig,
+				pcFactory,
+				channelName,
+			});
+			resolve({ connection, role });
+		});
+		signaling.onError((reason) => {
+			if (settled) return;
+			settled = true;
+			reject(new Error(reason));
+		});
+		signaling.connect().catch((err) => {
+			if (settled) return;
+			settled = true;
+			reject(err);
+		});
+	});

@@ -5,7 +5,10 @@ import { readLocalInputBits, applyRemoteInput } from '../engine/InputHandler.js'
 import { Control } from '../constants/controls.js';
 import { BattleScene } from '../scenes/BattleScene.js';
 import { SignalingClient } from './SignalingClient.js';
-import { createWebRTCConnection } from './WebRTCConnection.js';
+import {
+	createWebRTCConnection,
+	createMatchmadeConnection,
+} from './WebRTCConnection.js';
 
 /**
  * 넷플레이 부트스트랩. URL 파라미터가 없으면 아무 것도 하지 않으므로
@@ -15,8 +18,11 @@ import { createWebRTCConnection } from './WebRTCConnection.js';
  *   hostdemo  단일 PC·단일 탭 데모: 인메모리 루프백 + "스크립트 게스트"가 P1(Ryu)을
  *             자동 조작. 전 경로(전송+세션+입력주입) 눈으로 확인. 인터넷 조건 흉내:
  *               ?net=hostdemo&latency=60&loss=0.05
- *   host      대전 호스트. 시뮬 실행 + 상태 전송, P1은 게스트가 조작.
- *   guest     대전 게스트. 렌더 전용 — 호스트 상태를 그리고 WASD 전송.
+ *   host      대전 호스트(역할 직접 지정). 시뮬 실행 + 상태 전송, P1은 게스트가 조작.
+ *   guest     대전 게스트(역할 직접 지정). 렌더 전용 — 호스트 상태를 그리고 WASD 전송.
+ *   create    매치메이킹: 방을 만들고(서버가 host 배정) 방 코드를 발급. WebRTC 전용.
+ *             ?room= 생략 시 코드 자동 생성(콘솔에 출력). ?signal= 필수.
+ *   join      매치메이킹: 방 코드로 참가(서버가 guest 배정). ?room=코드 + ?signal= 필수.
  *
  * 전송 선택 (?transport=...):
  *   broadcast (기본)  BroadcastChannel — 같은 PC 두 탭. 서버·인터넷 불필요.
@@ -42,12 +48,75 @@ export const bootNetplay = (game) => {
 			return startHost(game, params);
 		case 'guest':
 			return startGuest(game, params);
+		case 'create':
+			return startMatchmaking(game, params, 'create');
+		case 'join':
+			return startMatchmaking(game, params, 'join');
 		default:
 			console.warn(`[netplay] 알 수 없는 net 모드: "${mode}"`);
 	}
 };
 
 const roomName = (params) => params.get('room') ?? 'streetfighter-net';
+
+// 혼동하기 쉬운 문자(I/O/0/1)를 뺀 4자리 방 코드.
+const randomRoomCode = () => {
+	const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+	let code = '';
+	for (let i = 0; i < 4; i++) {
+		code += alphabet[Math.floor(Math.random() * alphabet.length)];
+	}
+	return code;
+};
+
+/**
+ * 매치메이킹 부팅: 서버가 역할을 배정한다. create는 방을 만들고(host), join은 방
+ * 코드로 참가(guest). 역할은 'assigned' 수신 시점에 정해지므로 그때 NetSession을
+ * 구성한다(그 전까지 game.mode='local' — 무해). WebRTC 전용이라 ?signal= 필수.
+ */
+const startMatchmaking = (game, params, intent) => {
+	const signalUrl = params.get('signal');
+	if (!signalUrl) {
+		console.error('[netplay] 매치메이킹에는 ?signal=ws://... 이 필요합니다.');
+		return;
+	}
+	const room =
+		params.get('room') ?? (intent === 'create' ? randomRoomCode() : null);
+	if (!room) {
+		console.error('[netplay] join 에는 ?room=<코드> 가 필요합니다.');
+		return;
+	}
+	if (intent === 'create') {
+		console.log(`[netplay] 방 코드: ${room} — 상대에게 공유하세요.`);
+	}
+
+	const signaling = new SignalingClient({ url: signalUrl, room, intent });
+	createMatchmadeConnection({ signaling, rtcConfig: buildRtcConfig(params) })
+		.then(({ connection, role }) => {
+			if (role === 'host') {
+				game.mode = 'host';
+				game.netSession = new NetSession({
+					role: NetRole.HOST,
+					connection,
+					io: realIo,
+					remotePlayerId: 1,
+				});
+			} else {
+				game.mode = 'guest';
+				game.startScene(BattleScene);
+				game.netSession = new NetSession({
+					role: NetRole.GUEST,
+					connection,
+					io: realIo,
+					localPlayerIndex: 0,
+				});
+			}
+			console.log(`[netplay] 매치 성립 (role=${role}, room=${room}).`);
+		})
+		.catch((err) =>
+			console.error(`[netplay] 매치메이킹 실패: ${err.message}`)
+		);
+};
 
 /**
  * ?transport= 에 따라 Connection을 만든다. WebRTC는 협상이 비동기이므로
