@@ -1,4 +1,5 @@
 import { MessageType } from './protocol.js';
+import { serializeEntities, applyEntities } from './EntityCodec.js';
 
 /**
  * 배틀 상태 스냅샷 코덱 (Phase 1 상태 스트리밍).
@@ -11,6 +12,7 @@ import { MessageType } from './protocol.js';
  *   - 파이터: 상태(s), 애니 프레임(af), 방향(d), 위치(x,y), 피격 흔들림(hs)
  *   - 카메라: 위치(cam)
  *   - 상태바: 남은 시간(tm) + 각 파이터 체력(hp)/점수(sc)
+ *   - 엔티티(ent): 파동권·히트 스플래시 (Phase 1b, EntityCodec 참조)
  *   - 메타: 그리기 순서(ord), 승자(win)
  *
  * 필드명은 와이어 포맷이므로 짧게 유지하고 재배열하지 않는다.
@@ -47,6 +49,7 @@ export const serializeBattleState = (scene, gameState, frame = 0) => {
 			hp: fighter.hitPoints,
 			sc: fighter.score,
 		})),
+		ent: serializeEntities(scene),
 	};
 };
 
@@ -91,4 +94,7 @@ export const applyBattleState = (scene, gameState, snap) => {
 		gameState.fighters[index].hitPoints = g.hp;
 		gameState.fighters[index].score = g.sc;
 	});
+
+	// 파동권·히트 스플래시 등 동적 엔티티 조정 반영.
+	applyEntities(scene, snap.ent ?? []);
 };
