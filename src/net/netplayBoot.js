@@ -4,6 +4,8 @@ import { CONTROL_BIT } from './InputCodec.js';
 import { readLocalInputBits, applyRemoteInput } from '../engine/InputHandler.js';
 import { Control } from '../constants/controls.js';
 import { BattleScene } from '../scenes/BattleScene.js';
+import { SignalingClient } from './SignalingClient.js';
+import { createWebRTCConnection } from './WebRTCConnection.js';
 
 /**
  * 넷플레이 부트스트랩. URL 파라미터가 없으면 아무 것도 하지 않으므로
@@ -13,12 +15,20 @@ import { BattleScene } from '../scenes/BattleScene.js';
  *   hostdemo  단일 PC·단일 탭 데모: 인메모리 루프백 + "스크립트 게스트"가 P1(Ryu)을
  *             자동 조작. 전 경로(전송+세션+입력주입) 눈으로 확인. 인터넷 조건 흉내:
  *               ?net=hostdemo&latency=60&loss=0.05
- *   host      실제 2-탭 대전의 호스트. 시뮬 실행 + 상태 전송, P1은 게스트가 조작.
- *   guest     실제 2-탭 대전의 게스트. 렌더 전용 — 호스트 상태를 그리고 WASD 전송.
+ *   host      대전 호스트. 시뮬 실행 + 상태 전송, P1은 게스트가 조작.
+ *   guest     대전 게스트. 렌더 전용 — 호스트 상태를 그리고 WASD 전송.
  *
- * host/guest는 BroadcastChannel(같은 오리진 두 탭)로 연결된다. 방 이름은 ?room=..., 기본
- * 'streetfighter-net'. 두 탭을 같은 room으로 열면 붙는다.
- * (WebRTC 전송·실제 원격 매칭은 Phase 2에서 같은 Connection 인터페이스로 드롭인)
+ * 전송 선택 (?transport=...):
+ *   broadcast (기본)  BroadcastChannel — 같은 PC 두 탭. 서버·인터넷 불필요.
+ *   webrtc            WebRTC DataChannel(P2P/UDP) — 진짜 원격. 최초 협상만 시그널링
+ *                     서버를 거친다. ?signal=ws://호스트:포트 필수. 방은 ?room=.
+ *                     STUN 커스텀 ?stun=, TURN 중계 ?turn=&turnuser=&turncred=
+ *                     (TURN 자격증명은 런타임 값일 뿐 — 저장소에 커밋 금지).
+ *
+ * 예) 원격:
+ *   호스트  ?net=host&transport=webrtc&signal=ws://1.2.3.4:8080&room=abc
+ *   게스트  ?net=guest&transport=webrtc&signal=ws://1.2.3.4:8080&room=abc
+ * Connection 인터페이스가 동일하므로 게임/세션 코드는 전송을 전혀 몰라도 된다.
  */
 export const bootNetplay = (game) => {
 	const params = new URLSearchParams(location.search);
@@ -39,10 +49,62 @@ export const bootNetplay = (game) => {
 
 const roomName = (params) => params.get('room') ?? 'streetfighter-net';
 
-// 실제 2-탭 호스트: 시뮬 실행 + 상태 전송, 게스트 입력을 P1에 주입.
+/**
+ * ?transport= 에 따라 Connection을 만든다. WebRTC는 협상이 비동기이므로
+ * 채널이 아직 안 열린 Connection을 즉시 반환한다(열리면 onOpen 발화). NetSession은
+ * isOpen 전엔 update()가 no-op이라 그대로 넘겨도 안전 → 부트는 동기로 유지된다.
+ */
+const makeConnection = (params, role) => {
+	const transport = params.get('transport') ?? 'broadcast';
+	if (transport === 'webrtc') {
+		const signalUrl = params.get('signal');
+		if (!signalUrl) {
+			console.error(
+				'[netplay] transport=webrtc 에는 ?signal=ws://... 시그널링 URL이 필요합니다.'
+			);
+			return null;
+		}
+		const signaling = new SignalingClient({
+			url: signalUrl,
+			room: roomName(params),
+			role,
+		});
+		const connection = createWebRTCConnection({
+			role,
+			signaling,
+			rtcConfig: buildRtcConfig(params),
+		});
+		// 핸들러(onSignal/onReady)는 createWebRTCConnection가 동기로 등록 → 이제 접속.
+		signaling
+			.connect()
+			.then(() => console.log(`[netplay] 시그널링 접속됨 (${signalUrl})`))
+			.catch((err) => console.error('[netplay] 시그널링 접속 실패:', err));
+		return connection;
+	}
+	return new BroadcastChannelConnection(roomName(params));
+};
+
+/** ICE 설정. STUN은 공개 기본값, TURN 자격증명은 런타임 URL 파라미터로만. */
+const buildRtcConfig = (params) => {
+	const iceServers = [
+		{ urls: params.get('stun') ?? 'stun:stun.l.google.com:19302' },
+	];
+	const turn = params.get('turn');
+	if (turn) {
+		iceServers.push({
+			urls: turn,
+			username: params.get('turnuser') ?? '',
+			credential: params.get('turncred') ?? '',
+		});
+	}
+	return { iceServers };
+};
+
+// 호스트: 시뮬 실행 + 상태 전송, 게스트 입력을 P1에 주입.
 const startHost = (game, params) => {
-	const connection = new BroadcastChannelConnection(roomName(params));
 	game.mode = 'host';
+	const connection = makeConnection(params, 'host');
+	if (!connection) return;
 	game.netSession = new NetSession({
 		role: NetRole.HOST,
 		connection,
@@ -51,24 +113,25 @@ const startHost = (game, params) => {
 	});
 	console.log(
 		`[netplay] host (room=${roomName(params)}). 매치를 시작하세요. ` +
-			`P1(Ryu)은 게스트 탭이 조작합니다.`
+			`P1(Ryu)은 게스트가 조작합니다.`
 	);
 };
 
-// 실제 2-탭 게스트: 렌더 전용. 호스트 상태를 그리고 로컬 WASD를 전송.
+// 게스트: 렌더 전용. 호스트 상태를 그리고 로컬 WASD를 전송.
 const startGuest = (game, params) => {
-	const connection = new BroadcastChannelConnection(roomName(params));
 	game.mode = 'guest';
+	game.startScene(BattleScene); // 메뉴 대신 바로 배틀 화면(렌더 대상)으로
+	const connection = makeConnection(params, 'guest');
+	if (!connection) return;
 	game.netSession = new NetSession({
 		role: NetRole.GUEST,
 		connection,
 		io: realIo,
 		localPlayerIndex: 0, // 게스트는 로컬에서 P0 키(WASD)로 조작
 	});
-	game.startScene(BattleScene); // 메뉴 대신 바로 배틀 화면(렌더 대상)으로
 	console.log(
 		`[netplay] guest (room=${roomName(params)}). 호스트 화면을 렌더링합니다. ` +
-			`WASD+QERFVG로 P1을 조작하세요.`
+			`WASD+QERFVG로 조작하세요.`
 	);
 };
 

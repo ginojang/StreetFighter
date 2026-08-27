@@ -43,9 +43,10 @@ export class StreetFighterGame {
 	}
 
 	updateScenes = () => {
-		// 게스트(렌더 전용): 그리기 직전 최신 스냅샷을 적용 (배틀 씬일 때만).
+		// 게스트(렌더 전용): 그리기 직전 최신 스냅샷을 적용 (배틀 씬 + 세션 준비 시).
+		// netSession은 WebRTC 협상 중엔 아직 없을 수 있으므로 옵셔널 가드.
 		if (this.mode === 'guest' && this.scene.fighters) {
-			this.netSession.applyLatestState(this.scene, gameState);
+			this.netSession?.applyLatestState(this.scene, gameState);
 		}
 
 		this.scene.draw(this.context);
@@ -57,9 +58,9 @@ export class StreetFighterGame {
 
 		this.scene.update(this.frameTime);
 
-		// 호스트: 시뮬 후 상태를 게스트로 전송 (배틀 씬일 때만).
+		// 호스트: 시뮬 후 상태를 게스트로 전송 (배틀 씬 + 세션 준비 시).
 		if (this.mode === 'host' && this.scene.fighters) {
-			this.netSession.sendState(this.scene, gameState);
+			this.netSession?.sendState(this.scene, gameState);
 		}
 	};
 
