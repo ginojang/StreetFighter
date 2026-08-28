@@ -68,9 +68,9 @@ export const bootNetplay = (game) => {
 
 const roomName = (params) => params.get('room') ?? 'streetfighter-net';
 
-// 혼동하기 쉬운 문자(I/O/0/1)를 뺀 4자리 방 코드.
+// 4자리 숫자 방 코드 (알파벳은 게임 조작키와 겹쳐 제외 — Lobby.js와 동일 규칙).
 const randomRoomCode = () => {
-	const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+	const alphabet = '0123456789';
 	let code = '';
 	for (let i = 0; i < 4; i++) {
 		code += alphabet[Math.floor(Math.random() * alphabet.length)];

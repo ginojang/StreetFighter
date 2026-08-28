@@ -17,7 +17,9 @@ import { readLocalInputBits, applyRemoteInput } from '../engine/InputHandler.js'
  * → import 자체는 node에서 안전. 순수 헬퍼(코드 정규화·기본 URL·초대 링크)는 분리 테스트.
  */
 
-const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 혼동 문자(I/O/0/1) 제외
+// 숫자 전용. 알파벳 코드는 게임 이동/공격키(WASD+QERFVG)와 겹쳐, 전역 keydown
+// 핸들러가 그 키를 가로채면 로비 입력창에 글자가 안 찍히는 문제가 있었다 → 숫자만 사용.
+const CODE_ALPHABET = '0123456789';
 const realIo = { readLocalInputBits, applyRemoteInput };
 
 // ── 순수 헬퍼 (DOM 불필요, 단위 테스트 대상) ──────────────────────────────
@@ -30,12 +32,9 @@ export const randomRoomCode = () => {
 	return code;
 };
 
-/** 입력을 방 코드 형식으로 정규화: 대문자, 영숫자만, 4자리. */
+/** 입력을 방 코드 형식으로 정규화: 숫자만, 4자리. (알파벳은 게임 조작키와 겹쳐 제외.) */
 export const normalizeRoomCode = (input) =>
-	(input || '')
-		.toUpperCase()
-		.replace(/[^A-Z0-9]/g, '')
-		.slice(0, 4);
+	(input || '').replace(/[^0-9]/g, '').slice(0, 4);
 
 /**
  * 현재 위치에서 합리적인 시그널링 기본 URL 추정.
@@ -327,7 +326,8 @@ export const openLobby = (game, { signalUrl, rtcConfig, prefillRoom } = {}) => {
 		const codeInput = el('input', {
 			class: 'sfnp-field sfnp-code-input',
 			maxlength: '4',
-			placeholder: 'ABCD',
+			inputmode: 'numeric',
+			placeholder: '0000',
 			value: normalizeRoomCode(prefillRoom),
 		});
 		codeInput.addEventListener('input', () => {
