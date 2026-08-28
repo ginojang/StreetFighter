@@ -37,11 +37,16 @@ export const normalizeRoomCode = (input) =>
 		.replace(/[^A-Z0-9]/g, '')
 		.slice(0, 4);
 
-/** 현재 위치에서 합리적인 시그널링 기본 URL 추정. https면 wss(프록시 종단, 포트 생략). */
+/**
+ * 현재 위치에서 합리적인 시그널링 기본 URL 추정.
+ *   https → `wss://<host>/street_fighter/signal` : 배포 환경. nginx가 이 경로의
+ *           WebSocket 업그레이드를 로컬 시그널링 서버(127.0.0.1:8080)로 프록시한다.
+ *   http  → `ws://<host>:8080` : 로컬 개발(두 탭). 시그널링 서버에 직접 접속.
+ */
 export const defaultSignalUrl = (loc) => {
 	const secure = loc?.protocol === 'https:';
 	const host = loc?.hostname || 'localhost';
-	return secure ? `wss://${host}` : `ws://${host}:8080`;
+	return secure ? `wss://${host}/street_fighter/signal` : `ws://${host}:8080`;
 };
 
 /** 게스트가 눌러 바로 참가할 수 있는 초대 링크. */

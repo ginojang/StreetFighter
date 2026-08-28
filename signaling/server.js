@@ -24,6 +24,9 @@ const http = require('http');
 const crypto = require('crypto');
 
 const PORT = Number(process.env.PORT ?? 8080);
+// 리버스 프록시(nginx wss) 뒤에 둘 땐 HOST=127.0.0.1 로 바인드해 외부 직노출을 막는다.
+// 미지정 시 전 인터페이스(로컬 두 탭 테스트 등 직접 접속용) — 기존 동작 유지.
+const HOST = process.env.HOST || undefined;
 const WS_MAGIC = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 
 /** room 이름 → { host: socket|null, guest: socket|null } */
@@ -265,6 +268,8 @@ function log(msg) {
 	console.log(`[signaling] ${msg}`);
 }
 
-server.listen(PORT, () => {
-	console.log(`[signaling] listening on :${PORT}  (ws://…/?room=<name>&role=host|guest)`);
+server.listen(PORT, HOST, () => {
+	console.log(
+		`[signaling] listening on ${HOST || '0.0.0.0'}:${PORT}  (ws://…/?room=<name>&role=host|guest)`
+	);
 });
