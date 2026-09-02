@@ -25,11 +25,10 @@ main{
 }
 canvas{
   width: 100%;
-  height: 100%;
-  object-fit: contain;      /* 백킹(1528×896) 비율 유지 + 레터박스 */
+  max-height: 100%;
+  object-fit: contain;
   image-rendering: crisp-edges;
   image-rendering: pixelated;
-  display: block;
 }
 
 img{

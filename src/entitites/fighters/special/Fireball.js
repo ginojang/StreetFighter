@@ -12,7 +12,6 @@ import {
 	getActualBoxDimensions,
 } from '../../../utils/collisions.js';
 import { drawDebugBox } from '../../../utils/fighterDebug.js';
-import { snap, resetTransform } from '../../../utils/context.js';
 
 export class Fireball {
 	image = document.getElementById('KenImage');
@@ -263,13 +262,14 @@ export class Fireball {
 			y,
 			width,
 			height,
-			snap(this.position.x - camera.position.x) * this.direction - originX,
-			snap(this.position.y - camera.position.y) - originY,
+			Math.floor(this.position.x - camera.position.x) * this.direction -
+				originX,
+			Math.floor(this.position.y - camera.position.y) - originY,
 			width,
 			height
 		);
 
-		resetTransform(context);
+		context.setTransform(1, 0, 0, 1, 0, 0);
 	};
 
 	draw = (context, camera) => {
