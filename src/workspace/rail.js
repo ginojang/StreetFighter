@@ -4,6 +4,10 @@
 //
 // base href 가 /street_fighter/ 라 `./${query}` 는 항상 게임 루트 기준으로 풀린다.
 
+import { openSettings } from './settings.js';
+
+const ACTIONS = { settings: openSettings };
+
 const WORKSPACES = [
 	{ id: 'game', label: '게임', icon: '🎮', query: '', group: 'play' },
 	{ id: 'lobby', label: '온라인 로비', icon: '🌐', query: '?net=lobby', group: 'play' },
@@ -15,16 +19,13 @@ const WORKSPACES = [
 		query: '?net=hostdemo&latency=80&loss=0.08',
 		group: 'play',
 	},
-	{ id: 'crisp', label: '선명', icon: '✨', query: '?interp=0&blend=0', group: 'render' },
-	{ id: 'smooth', label: '보간', icon: '🌊', query: '?interp=1', group: 'render' },
-	{ id: 'blur', label: '모션블러', icon: '💫', query: '?blend=0.4', group: 'render' },
-	// 툴 — 별도 페이지(page). 게임 모드(query)와 달리 다른 HTML 로 이동.
+	// 툴 — 별도 페이지(page) 또는 액션(action). 게임 모드(query)와 다름.
 	{ id: 'sprite', label: '스프라이트 툴', icon: '🎞️', page: 'sprite-editor.html', group: 'tools' },
+	{ id: 'settings', label: '렌더 세팅', icon: '⚙️', action: 'settings', group: 'tools' },
 ];
 
 const GROUPS = [
 	{ id: 'play', label: '플레이' },
-	{ id: 'render', label: '렌더' },
 	{ id: 'tools', label: '툴' },
 ];
 
@@ -97,12 +98,19 @@ const build = () => {
 		lab.textContent = g.label;
 		sec.appendChild(lab);
 		for (const w of items) {
-			const a = document.createElement('a');
-			a.className = 'sf-rail-item' + (w.id === active ? ' active' : '');
-			a.href = hrefOf(w);
-			a.title = w.label;
-			a.innerHTML = `<span class="ic">${w.icon}</span><span class="tx">${w.label}</span>`;
-			sec.appendChild(a);
+			// 액션 항목(세팅 등)은 버튼 — 이동 대신 함수 호출. 나머지는 링크.
+			const isAction = !!w.action;
+			const node = document.createElement(isAction ? 'button' : 'a');
+			node.className = 'sf-rail-item' + (w.id === active ? ' active' : '');
+			node.title = w.label;
+			if (isAction) {
+				node.type = 'button';
+				node.addEventListener('click', () => ACTIONS[w.action]?.());
+			} else {
+				node.href = hrefOf(w);
+			}
+			node.innerHTML = `<span class="ic">${w.icon}</span><span class="tx">${w.label}</span>`;
+			sec.appendChild(node);
 		}
 		rail.appendChild(sec);
 	}

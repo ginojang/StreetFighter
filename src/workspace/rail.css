@@ -115,8 +115,13 @@ main {
 	text-decoration: none;
 	color: #c3cdd8;
 	font-size: 13.5px;
+	font-family: inherit;
+	text-align: left;
+	width: 100%;
+	background: none;
 	border: 1px solid transparent;
 	white-space: nowrap;
+	cursor: pointer;
 	transition: background 0.12s, color 0.12s;
 }
 .sf-rail-item .ic {

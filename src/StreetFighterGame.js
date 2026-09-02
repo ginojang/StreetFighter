@@ -9,6 +9,7 @@ import { FRAME_TIME, GAME_SPEED } from './constants/game.js';
 import { StartScene } from './scenes/StartScene.js';
 import { ContextHandler } from './engine/ContextHandler.js';
 import { createTimestepper } from './engine/FixedTimestep.js';
+import { renderSettings } from './state/renderSettings.js';
 import { gameState } from './states/gameState.js';
 
 const FIXED_DT = FRAME_TIME; // 시뮬 1틱 = 1프레임(1000/60ms). 이동량이 프레임 데이터에 픽셀로 박혀 있어 고정.
@@ -26,39 +27,9 @@ export class StreetFighterGame {
 	stepper = createTimestepper({ fixedDt: FIXED_DT, maxSteps: 5 });
 	simClock = 0; // 시뮬 시계(ms). 틱마다 FIXED_DT 증가 — 애니/타이머의 단일 클럭.
 	lastReal = 0; // 직전 rAF의 실제 timestamp(ms).
-	// 렌더 보간 모드 (Phase 2). ?interp=1 강제 켬 / ?interp=0 강제 끔 / 없으면 'auto'.
-	// auto: 주사율을 실측해 디스플레이가 60Hz(=시뮬레이트)보다 빠를 때만 켠다. 60Hz에선
-	// 보간이 매끄러움 이득 없이 ~1틱 지연만 더하므로 끄는 게 선명함(사용자 확인). >60Hz면 켜서 부드럽게.
-	interpMode = (() => {
-		// URL 파라미터가 있으면 그 값을 선호로 저장(레일 클릭이 지속되게). 없으면 저장된 선호,
-		// 그것도 없으면 'auto'(주사율 자동). 값: '1'=on / '0'=off.
-		const v = new URLSearchParams(location.search).get('interp');
-		let pref = v;
-		if (v === '1' || v === '0') {
-			try { localStorage.setItem('sf-interp', v); } catch {}
-		} else {
-			try { pref = localStorage.getItem('sf-interp'); } catch {}
-		}
-		return pref === '1' ? 'on' : pref === '0' ? 'off' : 'auto';
-	})();
+	// 렌더 보간/블러는 공유 상태(renderSettings)에서 실시간으로 읽는다(세팅 UI 가 바꾸면 즉시 반영).
 	frameDeltaEma = FIXED_DT; // 실측 프레임 간격 EMA(ms). 초기 60Hz 가정.
 	interpActive = false; // 이번 프레임 보간 사용 여부(frame에서 갱신).
-	// 프레임 블렌딩(모션블러/CRT 잔광 흉내). LCD sample-and-hold 마스킹용. 기본은 끔 —
-	// 대부분(특히 60Hz)은 블러 없는 선명함을 선호(사용자 확인). ?blend=0.4 등으로 옵트인.
-	blendAmount = (() => {
-		const clamp = (n) => (Number.isFinite(n) ? Math.max(0, Math.min(0.8, n)) : 0);
-		const v = new URLSearchParams(location.search).get('blend');
-		if (v !== null) {
-			const val = clamp(parseFloat(v));
-			try { localStorage.setItem('sf-blend', String(val)); } catch {}
-			return val;
-		}
-		try {
-			const s = localStorage.getItem('sf-blend');
-			if (s !== null) return clamp(parseFloat(s));
-		} catch {}
-		return 0; // 기본 끔
-	})();
 	prevFrame = undefined; // 직전 프레임(클린) 오프스크린 캔버스
 	curBuf = undefined; // 이번 프레임 클린 저장용(더블버퍼)
 	prevCtx = undefined;
@@ -116,7 +87,7 @@ export class StreetFighterGame {
 	// 직전 "클린"(블렌드 안 된) 프레임 1장만 섞으므로 누적·어두워짐·이전 씬 잔류가 없다.
 	// 정지 화면은 prev≈현재라 그대로(선명), 이동체만 2위치로 부드럽게 번진다(sample-and-hold 마스킹).
 	blendFrame = () => {
-		if (this.blendAmount <= 0) return;
+		if (renderSettings.blendAmount <= 0) return;
 		const ctx = this.context;
 		const canvas = ctx.canvas;
 		const mk = () => {
@@ -140,7 +111,7 @@ export class StreetFighterGame {
 		this.curCtx.clearRect(0, 0, canvas.width, canvas.height);
 		this.curCtx.drawImage(canvas, 0, 0);
 		// 2) 직전 클린을 알파로 덧그림 → 화면 = a·prev + (1-a)·cur
-		ctx.globalAlpha = this.blendAmount;
+		ctx.globalAlpha = renderSettings.blendAmount;
 		ctx.drawImage(this.prevFrame, 0, 0);
 		ctx.globalAlpha = 1;
 		// 3) 스왑: 다음 프레임의 prev = 이번 프레임 클린
@@ -195,9 +166,9 @@ export class StreetFighterGame {
 		}
 		// 보간 사용 여부: on/off 강제 또는 auto(디스플레이가 60Hz보다 확실히 빠를 때만).
 		this.interpActive =
-			this.interpMode === 'on'
+			renderSettings.interpMode === 'on'
 				? true
-				: this.interpMode === 'off'
+				: renderSettings.interpMode === 'off'
 				? false
 				: this.frameDeltaEma < FIXED_DT * 0.85; // auto: ~70Hz 초과면 보간
 
