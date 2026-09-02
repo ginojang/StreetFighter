@@ -1,4 +1,5 @@
 import { FRAME_TIME } from '../../../constants/game.js';
+import { snap } from '../../../utils/context.js';
 
 export class HitSplash {
 	constructor(x, y, playerId, entities) {
@@ -31,8 +32,8 @@ export class HitSplash {
 			sourceY,
 			sourceWidth,
 			sourceHeight,
-			Math.floor(this.position.x - camera.position.x - originX),
-			Math.floor(this.position.y - camera.position.y - originY),
+			snap(this.position.x - camera.position.x - originX),
+			snap(this.position.y - camera.position.y - originY),
 			sourceWidth,
 			sourceHeight
 		);

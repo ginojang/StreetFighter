@@ -3,7 +3,7 @@ import {
 	registerKeyboardEvents,
 	updateGamePads,
 } from './engine/InputHandler.js';
-import { getContext } from './utils/context.js';
+import { getContext, resetTransform } from './utils/context.js';
 import { BattleScene } from './scenes/BattleScene.js';
 import { FRAME_TIME, GAME_SPEED } from './constants/game.js';
 import { StartScene } from './scenes/StartScene.js';
@@ -86,7 +86,23 @@ export class StreetFighterGame {
 			this.netSession?.applyLatestState(this.scene, gameState);
 		}
 
-		this.context.filter = `brightness(${this.contextHandler.brightness}) contrast(${this.contextHandler.contrast})`;
+		// 필터는 전환(페이드) 중에만. 평상시(brightness=1,contrast=1)엔 'none' —
+		// 'none'이 아니면 매 draw마다 오프스크린 필터 버퍼링이 걸려 대형 캔버스(1528×896)에서
+		// 프레임이 붕괴한다(검은/멈춤 화면 원인). 전환은 짧으니 그때만 필터를 켠다.
+		const { brightness, contrast } = this.contextHandler;
+		this.context.filter =
+			brightness === 1 && contrast === 1
+				? 'none'
+				: `brightness(${brightness}) contrast(${contrast})`;
+		// 매 프레임 캔버스를 지우고(잔상 방지) 베이스 스케일(게임단위→디스플레이픽셀)로 변환 리셋.
+		this.context.setTransform(1, 0, 0, 1, 0, 0);
+		this.context.clearRect(
+			0,
+			0,
+			this.context.canvas.width,
+			this.context.canvas.height
+		);
+		resetTransform(this.context);
 		// 보간 끄면 alpha=1 → 현재 틱 위치로 그림(Phase 1 동작, 지연·지터 없음).
 		this.scene.draw(this.context, this.interpEnabled ? this.stepper.alpha : 1);
 		if (this.contextHandler.dimDown) return;
