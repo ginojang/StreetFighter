@@ -30,18 +30,34 @@ export class StreetFighterGame {
 	// auto: 주사율을 실측해 디스플레이가 60Hz(=시뮬레이트)보다 빠를 때만 켠다. 60Hz에선
 	// 보간이 매끄러움 이득 없이 ~1틱 지연만 더하므로 끄는 게 선명함(사용자 확인). >60Hz면 켜서 부드럽게.
 	interpMode = (() => {
+		// URL 파라미터가 있으면 그 값을 선호로 저장(레일 클릭이 지속되게). 없으면 저장된 선호,
+		// 그것도 없으면 'auto'(주사율 자동). 값: '1'=on / '0'=off.
 		const v = new URLSearchParams(location.search).get('interp');
-		return v === '1' ? 'on' : v === '0' ? 'off' : 'auto';
+		let pref = v;
+		if (v === '1' || v === '0') {
+			try { localStorage.setItem('sf-interp', v); } catch {}
+		} else {
+			try { pref = localStorage.getItem('sf-interp'); } catch {}
+		}
+		return pref === '1' ? 'on' : pref === '0' ? 'off' : 'auto';
 	})();
 	frameDeltaEma = FIXED_DT; // 실측 프레임 간격 EMA(ms). 초기 60Hz 가정.
 	interpActive = false; // 이번 프레임 보간 사용 여부(frame에서 갱신).
 	// 프레임 블렌딩(모션블러/CRT 잔광 흉내). LCD sample-and-hold 마스킹용. 기본은 끔 —
 	// 대부분(특히 60Hz)은 블러 없는 선명함을 선호(사용자 확인). ?blend=0.4 등으로 옵트인.
 	blendAmount = (() => {
+		const clamp = (n) => (Number.isFinite(n) ? Math.max(0, Math.min(0.8, n)) : 0);
 		const v = new URLSearchParams(location.search).get('blend');
-		if (v === null) return 0; // 기본 끔
-		const n = parseFloat(v);
-		return Number.isFinite(n) ? Math.max(0, Math.min(0.8, n)) : 0;
+		if (v !== null) {
+			const val = clamp(parseFloat(v));
+			try { localStorage.setItem('sf-blend', String(val)); } catch {}
+			return val;
+		}
+		try {
+			const s = localStorage.getItem('sf-blend');
+			if (s !== null) return clamp(parseFloat(s));
+		} catch {}
+		return 0; // 기본 끔
 	})();
 	prevFrame = undefined; // 직전 프레임(클린) 오프스크린 캔버스
 	curBuf = undefined; // 이번 프레임 클린 저장용(더블버퍼)
