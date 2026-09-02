@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ko">
+	<head>
+		<meta charset="UTF-8" />
+		<base href="/street_fighter/" />
+		<link rel="icon" href="./public/images/vsLogo.png" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>스프라이트 에디터 · Street Fighter</title>
+		<link rel="stylesheet" href="src/workspace/rail.css" />
+		<style>
+			:root {
+				color-scheme: dark;
+				--bg: #0e1017;
+				--panel: #151925;
+				--panel2: #1b2130;
+				--line: #262c3b;
+				--ink: #d6dde6;
+				--soft: #8c98a6;
+				--faint: #5f6a78;
+				--accent: #e8912f;
+			}
+			* { box-sizing: border-box; }
+			html, body { margin: 0; height: 100%; }
+			body {
+				background: var(--bg);
+				color: var(--ink);
+				font-family: system-ui, -apple-system, "Malgun Gothic", sans-serif;
+				overflow: hidden;
+			}
+			main { height: 100vh; width: 100vw; }
+			.se-app {
+				flex: 1 1 auto;
+				min-width: 0;
+				height: 100%;
+				display: flex;
+				flex-direction: column;
+			}
+			.se-head {
+				display: flex;
+				align-items: center;
+				gap: 16px;
+				padding: 10px 16px;
+				border-bottom: 1px solid var(--line);
+				background: var(--panel);
+			}
+			.se-title { font-weight: 700; font-size: 15px; }
+			.se-title span {
+				color: var(--faint);
+				font-size: 10px;
+				font-weight: 500;
+				letter-spacing: 0.1em;
+				text-transform: uppercase;
+				border: 1px solid var(--line);
+				padding: 2px 6px;
+				border-radius: 5px;
+				margin-left: 6px;
+			}
+			.se-tabs { display: flex; gap: 4px; }
+			.se-tab {
+				background: var(--panel2);
+				border: 1px solid var(--line);
+				color: var(--soft);
+				padding: 6px 14px;
+				border-radius: 7px;
+				cursor: pointer;
+				font-size: 13px;
+				font-weight: 600;
+			}
+			.se-tab:hover { color: var(--ink); }
+			.se-tab.active { background: #2a2015; color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+			.se-back { margin-left: auto; color: var(--soft); text-decoration: none; font-size: 13px; }
+			.se-back:hover { color: var(--ink); }
+
+			.se-body { flex: 1; display: flex; min-height: 0; }
+			.se-left {
+				flex: 1 1 60%;
+				min-width: 0;
+				display: flex;
+				flex-direction: column;
+				border-right: 1px solid var(--line);
+			}
+			.se-sheet-wrap {
+				flex: 1;
+				overflow: auto;
+				padding: 14px;
+				background: #0a0c12;
+				display: flex;
+				justify-content: center;
+				align-items: flex-start;
+			}
+			#se-sheet {
+				image-rendering: pixelated;
+				max-width: 100%;
+				cursor: crosshair;
+				border: 1px solid var(--line);
+				background: #0b0e14;
+			}
+			.se-list-wrap {
+				height: 132px;
+				border-top: 1px solid var(--line);
+				overflow-y: auto;
+				padding: 8px;
+				background: var(--panel);
+			}
+			.se-list { display: flex; flex-wrap: wrap; gap: 4px; }
+			.se-key {
+				font-family: "IBM Plex Mono", ui-monospace, monospace;
+				font-size: 11px;
+				background: var(--panel2);
+				border: 1px solid var(--line);
+				color: var(--soft);
+				padding: 3px 7px;
+				border-radius: 5px;
+				cursor: pointer;
+			}
+			.se-key:hover { color: var(--ink); }
+			.se-key.active { background: #2a2015; color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+
+			.se-right {
+				flex: 0 0 340px;
+				display: flex;
+				flex-direction: column;
+				overflow-y: auto;
+				background: var(--panel);
+			}
+			.se-panel { padding: 14px 16px; border-bottom: 1px solid var(--line); }
+			.se-panel-h {
+				font-size: 10px;
+				letter-spacing: 0.1em;
+				text-transform: uppercase;
+				color: var(--faint);
+				margin-bottom: 10px;
+			}
+			.se-frame-wrap {
+				background: #0a0c12;
+				border: 1px solid var(--line);
+				border-radius: 8px;
+				padding: 8px;
+				display: flex;
+				justify-content: center;
+				overflow: auto;
+				max-height: 300px;
+			}
+			#se-frame { image-rendering: pixelated; }
+			.se-controls { display: flex; align-items: center; gap: 16px; margin: 12px 0 4px; font-size: 12px; color: var(--soft); }
+			.se-controls input[type="range"] { vertical-align: middle; }
+			.se-meta {
+				margin-top: 10px;
+				font-family: "IBM Plex Mono", ui-monospace, monospace;
+				font-size: 11.5px;
+			}
+			.se-row { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; border-bottom: 1px solid #1c2230; }
+			.se-row span { color: var(--faint); }
+			.se-row b { color: var(--ink); font-weight: 500; }
+			.c-push { color: #3fb6ff !important; }
+			.c-hurt { color: #4ade80 !important; }
+			.c-hit { color: #ff5470 !important; }
+			.se-anim-row { display: flex; gap: 8px; }
+			#se-anim {
+				flex: 1;
+				background: var(--panel2);
+				border: 1px solid var(--line);
+				color: var(--ink);
+				border-radius: 6px;
+				padding: 6px 8px;
+				font-size: 12.5px;
+			}
+			#se-play {
+				background: var(--accent);
+				border: none;
+				color: #1a1206;
+				font-weight: 700;
+				border-radius: 6px;
+				padding: 6px 14px;
+				cursor: pointer;
+				font-size: 12.5px;
+			}
+			.se-playinfo { margin-top: 8px; font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--soft); min-height: 14px; }
+			.se-legend { display: flex; gap: 14px; margin-top: 10px; font-size: 11px; }
+			@media (max-width: 760px) {
+				.se-body { flex-direction: column; }
+				.se-right { flex-basis: auto; }
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<nav id="sf-rail" aria-label="워크스페이스"></nav>
+			<div class="se-app">
+				<header class="se-head">
+					<div class="se-title">스프라이트 에디터<span>MVP</span></div>
+					<div class="se-tabs">
+						<button class="se-tab" data-f="ryu">Ryu</button>
+						<button class="se-tab" data-f="ken">Ken</button>
+					</div>
+					<a class="se-back" href="./">← 게임으로</a>
+				</header>
+				<div class="se-body">
+					<section class="se-left">
+						<div class="se-sheet-wrap"><canvas id="se-sheet"></canvas></div>
+						<div class="se-list-wrap"><div id="se-list" class="se-list"></div></div>
+					</section>
+					<aside class="se-right">
+						<div class="se-panel">
+							<div class="se-panel-h">프레임 인스펙터</div>
+							<div class="se-frame-wrap"><canvas id="se-frame"></canvas></div>
+							<div class="se-controls">
+								<label>줌 <input id="se-zoom" type="range" min="1" max="6" value="3" /></label>
+								<label><input id="se-boxes" type="checkbox" checked /> 박스</label>
+							</div>
+							<div id="se-meta" class="se-meta"></div>
+						</div>
+						<div class="se-panel">
+							<div class="se-panel-h">애니메이션 재생</div>
+							<div class="se-anim-row">
+								<select id="se-anim"></select>
+								<button id="se-play">▶ 재생</button>
+							</div>
+							<div id="se-playinfo"></div>
+							<div class="se-legend">
+								<span class="c-push">■ push</span>
+								<span class="c-hurt">■ hurt</span>
+								<span class="c-hit">■ hit</span>
+							</div>
+						</div>
+					</aside>
+				</div>
+			</div>
+		</main>
+
+		<!-- 파이터 스프라이트시트 (에디터가 getElementById 로 참조) -->
+		<img id="RyuImage" src="public/images/Ryu.png" alt="Ryu" style="display: none" />
+		<img id="KenImage" src="./public/images/Ken.png" alt="Ken" style="display: none" />
+
+		<script type="module" src="src/workspace/rail.js"></script>
+		<script type="module" src="src/tools/spriteEditor.js"></script>
+	</body>
+</html>

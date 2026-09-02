@@ -18,12 +18,18 @@ const WORKSPACES = [
 	{ id: 'crisp', label: '선명', icon: '✨', query: '?interp=0&blend=0', group: 'render' },
 	{ id: 'smooth', label: '보간', icon: '🌊', query: '?interp=1', group: 'render' },
 	{ id: 'blur', label: '모션블러', icon: '💫', query: '?blend=0.4', group: 'render' },
+	// 툴 — 별도 페이지(page). 게임 모드(query)와 달리 다른 HTML 로 이동.
+	{ id: 'sprite', label: '스프라이트 툴', icon: '🎞️', page: 'sprite-editor.html', group: 'tools' },
 ];
 
 const GROUPS = [
 	{ id: 'play', label: '플레이' },
 	{ id: 'render', label: '렌더' },
+	{ id: 'tools', label: '툴' },
 ];
+
+// 워크스페이스의 링크 주소(base href /street_fighter/ 기준 상대).
+const hrefOf = (w) => `./${w.page ?? w.query ?? ''}`;
 
 const STORAGE_KEY = 'sf-rail-collapsed';
 
@@ -42,10 +48,14 @@ const setCollapsed = (v) => {
 	}
 };
 
-// 현재 URL 이 어떤 워크스페이스인지(정확 일치). 게임은 파라미터 없음.
+// 현재 URL 이 어떤 워크스페이스인지. 툴은 pathname(페이지), 게임 모드는 search(파라미터)로 판별.
 const currentId = () => {
+	const path = location.pathname;
+	const pageHit = WORKSPACES.find((w) => w.page && path.endsWith(w.page));
+	if (pageHit) return pageHit.id;
+	// 툴 페이지가 아니면(게임 index) search 로 모드 판별.
 	const s = location.search;
-	const hit = WORKSPACES.find((w) => (w.query || '') === s);
+	const hit = WORKSPACES.find((w) => !w.page && (w.query || '') === s);
 	return hit ? hit.id : s === '' ? 'game' : null;
 };
 
@@ -89,7 +99,7 @@ const build = () => {
 		for (const w of items) {
 			const a = document.createElement('a');
 			a.className = 'sf-rail-item' + (w.id === active ? ' active' : '');
-			a.href = `./${w.query}`;
+			a.href = hrefOf(w);
 			a.title = w.label;
 			a.innerHTML = `<span class="ic">${w.icon}</span><span class="tx">${w.label}</span>`;
 			sec.appendChild(a);
