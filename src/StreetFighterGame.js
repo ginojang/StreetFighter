@@ -26,15 +26,20 @@ export class StreetFighterGame {
 	stepper = createTimestepper({ fixedDt: FIXED_DT, maxSteps: 5 });
 	simClock = 0; // 시뮬 시계(ms). 틱마다 FIXED_DT 증가 — 애니/타이머의 단일 클럭.
 	lastReal = 0; // 직전 rAF의 실제 timestamp(ms).
-	// 렌더 보간 on/off (Phase 2). ?interp=0 이면 현재 틱 위치로 그려(alpha=1) 지터·지연 없이 A/B 비교.
-	interpEnabled =
-		new URLSearchParams(location.search).get('interp') !== '0';
-	// 프레임 블렌딩(모션블러/CRT 잔광 흉내). 직전 프레임을 낮은 알파로 덧그려 이동체가 잔상을
-	// 남기며 감쇠 → LCD sample-and-hold 시각피로를 마스킹(3D의 모션블러와 같은 원리).
-	// 정지 화면은 prev≈현재라 그대로(선명). ?blend=0 끔, ?blend=0.4 등으로 세기 조절.
+	// 렌더 보간 모드 (Phase 2). ?interp=1 강제 켬 / ?interp=0 강제 끔 / 없으면 'auto'.
+	// auto: 주사율을 실측해 디스플레이가 60Hz(=시뮬레이트)보다 빠를 때만 켠다. 60Hz에선
+	// 보간이 매끄러움 이득 없이 ~1틱 지연만 더하므로 끄는 게 선명함(사용자 확인). >60Hz면 켜서 부드럽게.
+	interpMode = (() => {
+		const v = new URLSearchParams(location.search).get('interp');
+		return v === '1' ? 'on' : v === '0' ? 'off' : 'auto';
+	})();
+	frameDeltaEma = FIXED_DT; // 실측 프레임 간격 EMA(ms). 초기 60Hz 가정.
+	interpActive = false; // 이번 프레임 보간 사용 여부(frame에서 갱신).
+	// 프레임 블렌딩(모션블러/CRT 잔광 흉내). LCD sample-and-hold 마스킹용. 기본은 끔 —
+	// 대부분(특히 60Hz)은 블러 없는 선명함을 선호(사용자 확인). ?blend=0.4 등으로 옵트인.
 	blendAmount = (() => {
 		const v = new URLSearchParams(location.search).get('blend');
-		if (v === null) return 0.4; // 기본 세기
+		if (v === null) return 0; // 기본 끔
 		const n = parseFloat(v);
 		return Number.isFinite(n) ? Math.max(0, Math.min(0.8, n)) : 0;
 	})();
@@ -152,8 +157,8 @@ export class StreetFighterGame {
 			this.context.canvas.height
 		);
 		resetTransform(this.context);
-		// 보간 끄면 alpha=1 → 현재 틱 위치로 그림(Phase 1 동작, 지연·지터 없음).
-		this.scene.draw(this.context, this.interpEnabled ? this.stepper.alpha : 1);
+		// 보간 비활성(60Hz auto/off)이면 alpha=1 → 현재 틱 위치로 그림(지연·지터 없이 선명).
+		this.scene.draw(this.context, this.interpActive ? this.stepper.alpha : 1);
 		this.blendFrame();
 		if (this.contextHandler.dimDown) return;
 		if (!this.sceneStarted) this.startScene(this.nextScene);
@@ -167,8 +172,21 @@ export class StreetFighterGame {
 			this.lastReal = time;
 		}
 
-		// 실제 경과(ms)에 GAME_SPEED를 곱해 누산 → 고정 dt 틱으로 소비.
-		const elapsed = (time - this.lastReal) * GAME_SPEED;
+		// 실제 프레임 간격(ms) 실측 → EMA. GAME_SPEED 곱하기 전의 순수 시간.
+		const rawDelta = time - this.lastReal;
+		if (rawDelta > 0 && rawDelta < 100) {
+			this.frameDeltaEma += (rawDelta - this.frameDeltaEma) * 0.1;
+		}
+		// 보간 사용 여부: on/off 강제 또는 auto(디스플레이가 60Hz보다 확실히 빠를 때만).
+		this.interpActive =
+			this.interpMode === 'on'
+				? true
+				: this.interpMode === 'off'
+				? false
+				: this.frameDeltaEma < FIXED_DT * 0.85; // auto: ~70Hz 초과면 보간
+
+		// 실제 경과에 GAME_SPEED를 곱해 누산 → 고정 dt 틱으로 소비.
+		const elapsed = rawDelta * GAME_SPEED;
 		this.lastReal = time;
 
 		const steps = this.stepper.advance(elapsed);
