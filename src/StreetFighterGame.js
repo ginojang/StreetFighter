@@ -29,6 +29,19 @@ export class StreetFighterGame {
 	// 렌더 보간 on/off (Phase 2). ?interp=0 이면 현재 틱 위치로 그려(alpha=1) 지터·지연 없이 A/B 비교.
 	interpEnabled =
 		new URLSearchParams(location.search).get('interp') !== '0';
+	// 프레임 블렌딩(모션블러/CRT 잔광 흉내). 직전 프레임을 낮은 알파로 덧그려 이동체가 잔상을
+	// 남기며 감쇠 → LCD sample-and-hold 시각피로를 마스킹(3D의 모션블러와 같은 원리).
+	// 정지 화면은 prev≈현재라 그대로(선명). ?blend=0 끔, ?blend=0.4 등으로 세기 조절.
+	blendAmount = (() => {
+		const v = new URLSearchParams(location.search).get('blend');
+		if (v === null) return 0.4; // 기본 세기
+		const n = parseFloat(v);
+		return Number.isFinite(n) ? Math.max(0, Math.min(0.8, n)) : 0;
+	})();
+	prevFrame = undefined; // 직전 프레임(클린) 오프스크린 캔버스
+	curBuf = undefined; // 이번 프레임 클린 저장용(더블버퍼)
+	prevCtx = undefined;
+	curCtx = undefined;
 
 	timeStarted = 0;
 	sceneStarted = false;
@@ -78,6 +91,42 @@ export class StreetFighterGame {
 		}
 	};
 
+	// 프레임 블렌딩(모션블러): display = a·직전클린 + (1-a)·현재클린. **비재귀 더블버퍼** —
+	// 직전 "클린"(블렌드 안 된) 프레임 1장만 섞으므로 누적·어두워짐·이전 씬 잔류가 없다.
+	// 정지 화면은 prev≈현재라 그대로(선명), 이동체만 2위치로 부드럽게 번진다(sample-and-hold 마스킹).
+	blendFrame = () => {
+		if (this.blendAmount <= 0) return;
+		const ctx = this.context;
+		const canvas = ctx.canvas;
+		const mk = () => {
+			const c = document.createElement('canvas');
+			c.width = canvas.width;
+			c.height = canvas.height;
+			const cx = c.getContext('2d');
+			cx.imageSmoothingEnabled = false;
+			return [c, cx];
+		};
+		if (!this.prevFrame) {
+			[this.prevFrame, this.prevCtx] = mk();
+			[this.curBuf, this.curCtx] = mk();
+			ctx.setTransform(1, 0, 0, 1, 0, 0);
+			this.prevCtx.drawImage(canvas, 0, 0); // 첫 프레임 클린 저장, 블렌드는 다음부터
+			return;
+		}
+		ctx.setTransform(1, 0, 0, 1, 0, 0); // 1:1 디바이스 좌표
+		ctx.filter = 'none';
+		// 1) 현재 클린을 curBuf에 저장(오버레이 전)
+		this.curCtx.clearRect(0, 0, canvas.width, canvas.height);
+		this.curCtx.drawImage(canvas, 0, 0);
+		// 2) 직전 클린을 알파로 덧그림 → 화면 = a·prev + (1-a)·cur
+		ctx.globalAlpha = this.blendAmount;
+		ctx.drawImage(this.prevFrame, 0, 0);
+		ctx.globalAlpha = 1;
+		// 3) 스왑: 다음 프레임의 prev = 이번 프레임 클린
+		[this.prevFrame, this.curBuf] = [this.curBuf, this.prevFrame];
+		[this.prevCtx, this.curCtx] = [this.curCtx, this.prevCtx];
+	};
+
 	// 매 rAF 1회. 그리기 + 씬 스왑 부기(簿記). (Phase 2에서 alpha 보간을 여기서 소비.)
 	render = () => {
 		// 게스트(렌더 전용): 그리기 직전 최신 스냅샷을 적용 (배틀 씬 + 세션 준비 시).
@@ -105,6 +154,7 @@ export class StreetFighterGame {
 		resetTransform(this.context);
 		// 보간 끄면 alpha=1 → 현재 틱 위치로 그림(Phase 1 동작, 지연·지터 없음).
 		this.scene.draw(this.context, this.interpEnabled ? this.stepper.alpha : 1);
+		this.blendFrame();
 		if (this.contextHandler.dimDown) return;
 		if (!this.sceneStarted) this.startScene(this.nextScene);
 	};
