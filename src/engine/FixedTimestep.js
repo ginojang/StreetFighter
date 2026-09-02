@@ -53,6 +53,7 @@ export const withInterpolatedPositions = (targets, alpha, maxDelta, draw) => {
 export const createTimestepper = ({
 	fixedDt = FRAME_TIME,
 	maxSteps = 5,
+	snapTolerance = FRAME_TIME * 0.15,
 } = {}) => {
 	let accumulator = 0;
 
@@ -62,6 +63,16 @@ export const createTimestepper = ({
 		 * 돌려야 할 시뮬 틱 수를 반환한다. 남은 시간은 누산기에 보관돼 다음 프레임으로 이월.
 		 */
 		advance(elapsedMs) {
+			// vsync 타임 스냅: 프레임 간격이 fixedDt의 정수배에 가까우면 정확한 배수로 스냅한다.
+			// display ≈ sim rate(예: 60Hz)에서 rAF 타이밍 노이즈(±1~2ms)가 alpha 를 튀게 해
+			// 캐릭터가 직전 틱↔현재 틱으로 진동(잔상)하는 것을 막는다. 안 가까우면(144Hz 등) 그대로.
+			for (let k = 1; k <= maxSteps; k += 1) {
+				if (Math.abs(elapsedMs - k * fixedDt) <= snapTolerance) {
+					elapsedMs = k * fixedDt;
+					break;
+				}
+			}
+
 			accumulator += elapsedMs;
 
 			// 스파이럴 방지: 밀린 시간을 maxSteps 틱분으로 제한.

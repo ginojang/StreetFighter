@@ -26,6 +26,9 @@ export class StreetFighterGame {
 	stepper = createTimestepper({ fixedDt: FIXED_DT, maxSteps: 5 });
 	simClock = 0; // 시뮬 시계(ms). 틱마다 FIXED_DT 증가 — 애니/타이머의 단일 클럭.
 	lastReal = 0; // 직전 rAF의 실제 timestamp(ms).
+	// 렌더 보간 on/off (Phase 2). ?interp=0 이면 현재 틱 위치로 그려(alpha=1) 지터·지연 없이 A/B 비교.
+	interpEnabled =
+		new URLSearchParams(location.search).get('interp') !== '0';
 
 	timeStarted = 0;
 	sceneStarted = false;
@@ -84,7 +87,8 @@ export class StreetFighterGame {
 		}
 
 		this.context.filter = `brightness(${this.contextHandler.brightness}) contrast(${this.contextHandler.contrast})`;
-		this.scene.draw(this.context, this.stepper.alpha);
+		// 보간 끄면 alpha=1 → 현재 틱 위치로 그림(Phase 1 동작, 지연·지터 없음).
+		this.scene.draw(this.context, this.interpEnabled ? this.stepper.alpha : 1);
 		if (this.contextHandler.dimDown) return;
 		if (!this.sceneStarted) this.startScene(this.nextScene);
 	};
