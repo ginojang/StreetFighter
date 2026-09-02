@@ -1,4 +1,5 @@
 import * as control from '../../engine/InputHandler.js';
+import { snap, resetTransform } from '../../utils/context.js';
 import {
 	SCENE_WIDTH,
 	STAGE_FLOOR,
@@ -936,14 +937,13 @@ export class Fighter {
 			y,
 			width,
 			height,
-			Math.floor((this.position.x - camera.position.x) * this.direction) -
-				originX,
-			Math.floor(this.position.y - camera.position.y) - originY,
+			snap((this.position.x - camera.position.x) * this.direction) - originX,
+			snap(this.position.y - camera.position.y) - originY,
 			width,
 			height
 		);
 
-		context.setTransform(1, 0, 0, 1, 0, 0);
+		resetTransform(context);
 		DRAW_DEBUG && DEBUG_drawCollisionInfo(this, context, camera);
 	};
 }

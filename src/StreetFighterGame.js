@@ -3,7 +3,7 @@ import {
 	registerKeyboardEvents,
 	updateGamePads,
 } from './engine/InputHandler.js';
-import { getContext } from './utils/context.js';
+import { getContext, resetTransform } from './utils/context.js';
 import { BattleScene } from './scenes/BattleScene.js';
 import { FRAME_TIME, GAME_SPEED } from './constants/game.js';
 import { StartScene } from './scenes/StartScene.js';
@@ -87,6 +87,15 @@ export class StreetFighterGame {
 		}
 
 		this.context.filter = `brightness(${this.contextHandler.brightness}) contrast(${this.contextHandler.contrast})`;
+		// 매 프레임 캔버스를 지우고(잔상 방지) 베이스 스케일(게임단위→디스플레이픽셀)로 변환 리셋.
+		this.context.setTransform(1, 0, 0, 1, 0, 0);
+		this.context.clearRect(
+			0,
+			0,
+			this.context.canvas.width,
+			this.context.canvas.height
+		);
+		resetTransform(this.context);
 		// 보간 끄면 alpha=1 → 현재 틱 위치로 그림(Phase 1 동작, 지연·지터 없음).
 		this.scene.draw(this.context, this.interpEnabled ? this.stepper.alpha : 1);
 		if (this.contextHandler.dimDown) return;

@@ -1,4 +1,5 @@
 import { STAGE_FLOOR } from '../../../constants/stage.js';
+import { snap, resetTransform } from '../../../utils/context.js';
 
 export class Shadow {
 	constructor(fighter) {
@@ -38,14 +39,14 @@ export class Shadow {
 			y,
 			width,
 			height,
-			Math.floor(
+			snap(
 				this.fighter.position.x - camera.position.x - originX * scaleX - offsetX
 			),
-			Math.floor(STAGE_FLOOR - camera.position.y - originY * scaleY - offsetY),
+			snap(STAGE_FLOOR - camera.position.y - originY * scaleY - offsetY),
 			Math.floor(width * scaleX),
 			Math.floor(height * scaleY)
 		);
 		context.globalAlpha = 1;
-		context.setTransform(1, 0, 0, 1, 0, 0);
+		resetTransform(context);
 	};
 }
