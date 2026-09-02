@@ -66,6 +66,7 @@ export class StreetFighterGame {
 		if (this.contextHandler.dimDown) return;
 		if (!this.sceneStarted) return; // 씬 스왑은 render()에서 처리.
 
+		this.scene.snapshotForInterp?.(); // 렌더 보간용 직전 틱 위치 기록 (update 직전).
 		this.scene.update(this.frameTime);
 
 		// 호스트: 시뮬 후 상태를 게스트로 전송 (배틀 씬 + 세션 준비 시).
@@ -83,7 +84,7 @@ export class StreetFighterGame {
 		}
 
 		this.context.filter = `brightness(${this.contextHandler.brightness}) contrast(${this.contextHandler.contrast})`;
-		this.scene.draw(this.context);
+		this.scene.draw(this.context, this.stepper.alpha);
 		if (this.contextHandler.dimDown) return;
 		if (!this.sceneStarted) this.startScene(this.nextScene);
 	};

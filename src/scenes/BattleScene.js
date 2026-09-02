@@ -25,7 +25,13 @@ import { FpsCounter } from '../entitites/overlays/FpsCounter.js';
 import { StatusBar } from '../entitites/overlays/StatusBar.js';
 import { KenStage } from '../entitites/stage/KenStage.js';
 import { gameState, resetGameState } from '../states/gameState.js';
+import { withInterpolatedPositions } from '../engine/FixedTimestep.js';
 import { StartScene } from './StartScene.js';
+
+// 렌더 보간(Phase 2): 한 틱에 이보다 크게 움직였으면 텔레포트로 보고 보간하지 않고
+// 현재 위치로 스냅한다(라운드 리셋·KO·화면경계 클램프가 슬라이드로 보이는 것 방지).
+// 정상 이동은 틱당 수 px이므로 30px면 넉넉히 가른다. DragonHearts INTERP_MAX_DELTA 대응.
+const INTERP_MAX_DELTA = 30;
 
 export class BattleScene {
 	image = document.getElementById('Winner');
@@ -201,12 +207,40 @@ export class BattleScene {
 		}
 	}
 
-	draw = (context) => {
-		this.stage.drawBackground(context, this.camera);
-		this.drawShadows(context);
-		this.drawFighters(context);
-		this.entities.draw(context, this.camera);
-		this.stage.drawForeground(context, this.camera);
-		this.drawOverlays(context);
+	// 렌더 보간 대상: 눈이 따라가는 이동체 — 파이터·카메라·엔티티(파동권 등).
+	// shadow는 draw에서 fighter.position을 읽으므로 swap 창 안에서 자동으로 따라온다.
+	getInterpTargets = () => [
+		...this.fighters,
+		this.camera,
+		...this.entities.entitiesList,
+	];
+
+	// 틱마다 scene.update() 직전에 호출 — 직전 틱 위치를 기록(보간 시작점).
+	snapshotForInterp = () => {
+		for (const target of this.getInterpTargets()) {
+			if (!target?.position) continue;
+			target.previousPosition = {
+				x: target.position.x,
+				y: target.position.y,
+			};
+		}
+	};
+
+	// 그리기 직전에 좌표를 보간값으로 바꿔치고, 그린 뒤 되돌린다(시뮬 상태 불변).
+	// hurtShake는 draw 시점의 소스 오프셋이라 보간 대상이 아니다 — 타격감 보존.
+	draw = (context, alpha = 0) => {
+		withInterpolatedPositions(
+			this.getInterpTargets(),
+			alpha,
+			INTERP_MAX_DELTA,
+			() => {
+				this.stage.drawBackground(context, this.camera);
+				this.drawShadows(context);
+				this.drawFighters(context);
+				this.entities.draw(context, this.camera);
+				this.stage.drawForeground(context, this.camera);
+				this.drawOverlays(context);
+			}
+		);
 	};
 }

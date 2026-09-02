@@ -15,6 +15,41 @@ import { FRAME_TIME } from '../constants/game.js';
  * - **60Hz 무회귀**: 프레임 간격이 정확히 fixedDt면 매 프레임 정확히 1틱 →
  *   기존 가변 루프와 동일하게 동작한다.
  */
+/** 선형 보간. t=0→a, t=1→b. */
+export const lerp = (a, b, t) => a + (b - a) * t;
+
+/**
+ * 렌더 보간용 축(axis) 보간 (Phase 2). 직전 틱값 `a`와 현재 틱값 `b` 사이를 위상 `t`로
+ * 보간하되, 한 틱 이동폭이 `maxDelta`를 넘으면 **텔레포트로 보고 스냅**(보간 안 함).
+ * 라운드 리셋·KO 재배치·화면경계 클램프가 매끄러운 슬라이드로 보이는 것을 막는다.
+ */
+export const interpAxis = (a, b, t, maxDelta) =>
+	Math.abs(b - a) > maxDelta ? b : a + (b - a) * t;
+
+/**
+ * 렌더 보간 스왑(Phase 2, DragonHearts RenderInterpBegin/End 대응).
+ * `targets`의 `position`을 `previousPosition`↔현재값 사이 보간값으로 바꿔치고 `draw()`를
+ * 호출한 뒤 원래 좌표로 되돌린다 — **시뮬 상태는 불변**(그리기 직전 바꿔치고 직후 원복).
+ * `previousPosition`이 없는 대상(스폰 직후 등)은 건너뛴다. try/finally라 draw가 던져도 원복.
+ */
+export const withInterpolatedPositions = (targets, alpha, maxDelta, draw) => {
+	const swapped = [];
+	for (const target of targets) {
+		if (!target?.position || !target.previousPosition) continue;
+		const real = target.position;
+		swapped.push([target, real]);
+		target.position = {
+			x: interpAxis(target.previousPosition.x, real.x, alpha, maxDelta),
+			y: interpAxis(target.previousPosition.y, real.y, alpha, maxDelta),
+		};
+	}
+	try {
+		draw();
+	} finally {
+		for (const [target, real] of swapped) target.position = real;
+	}
+};
+
 export const createTimestepper = ({
 	fixedDt = FRAME_TIME,
 	maxSteps = 5,
