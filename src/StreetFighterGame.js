@@ -83,6 +83,17 @@ export class StreetFighterGame {
 		}
 	};
 
+	// 픽셀 스무딩(공간축 잔상 마스킹): 스프라이트 4× 업스케일을 bilinear 로 부드럽게 한다.
+	// 캔버스 플래그는 매 프레임 싸게 재설정(라이브 토글 보장), CSS 다운스케일 클래스는 변할 때만.
+	applySmoothing = () => {
+		const on = renderSettings.smooth;
+		this.context.imageSmoothingEnabled = on;
+		if (this._smoothCss !== on) {
+			this._smoothCss = on;
+			this.context.canvas.classList.toggle('smooth', on);
+		}
+	};
+
 	// 프레임 블렌딩(모션블러): display = a·직전클린 + (1-a)·현재클린. **비재귀 더블버퍼** —
 	// 직전 "클린"(블렌드 안 된) 프레임 1장만 섞으므로 누적·어두워짐·이전 씬 잔류가 없다.
 	// 정지 화면은 prev≈현재라 그대로(선명), 이동체만 2위치로 부드럽게 번진다(sample-and-hold 마스킹).
@@ -144,6 +155,7 @@ export class StreetFighterGame {
 			this.context.canvas.height
 		);
 		resetTransform(this.context);
+		this.applySmoothing(); // 픽셀 스무딩 라이브 반영(renderSettings.smooth)
 		// 보간 비활성(60Hz auto/off)이면 alpha=1 → 현재 틱 위치로 그림(지연·지터 없이 선명).
 		this.scene.draw(this.context, this.interpActive ? this.stepper.alpha : 1);
 		this.blendFrame();

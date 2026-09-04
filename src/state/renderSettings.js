@@ -4,6 +4,7 @@
 
 const KEY_INTERP = 'sf-interp';
 const KEY_BLEND = 'sf-blend';
+const KEY_SMOOTH = 'sf-smooth';
 
 const clampBlend = (n) => (Number.isFinite(n) ? Math.max(0, Math.min(0.8, n)) : 0);
 const read = (k) => {
@@ -31,6 +32,14 @@ const normInterp = (s) =>
 		? 'auto'
 		: null;
 
+// 불리언 파라미터('1'/'0'/'on'/'off'/'true'/'false').
+const normBool = (s) =>
+	s === '1' || s === 'on' || s === 'true'
+		? true
+		: s === '0' || s === 'off' || s === 'false'
+		? false
+		: null;
+
 const params = new URLSearchParams(location.search);
 
 let interpMode = (() => {
@@ -53,12 +62,27 @@ let blendAmount = (() => {
 	return s !== null ? clampBlend(parseFloat(s)) : 0;
 })();
 
+// 픽셀 스무딩. 기본 ON(사용자 선호, 2026-09-04) — 이동 잔상(LCD sample-and-hold)을
+// 공간축으로 마스킹. Uljima6 M0 실측: 정수배율(우리 snap)+상시 smooth 조합이 최적.
+let smooth = (() => {
+	const p = normBool(params.get('smooth'));
+	if (p !== null) {
+		write(KEY_SMOOTH, p ? '1' : '0');
+		return p;
+	}
+	const s = normBool(read(KEY_SMOOTH));
+	return s !== null ? s : true; // 기본 ON
+})();
+
 export const renderSettings = {
 	get interpMode() {
 		return interpMode;
 	},
 	get blendAmount() {
 		return blendAmount;
+	},
+	get smooth() {
+		return smooth;
 	},
 	setInterp(mode) {
 		interpMode = normInterp(mode) ?? 'auto';
@@ -68,8 +92,13 @@ export const renderSettings = {
 		blendAmount = clampBlend(typeof v === 'number' ? v : parseFloat(v));
 		write(KEY_BLEND, String(blendAmount));
 	},
+	setSmooth(v) {
+		smooth = !!v;
+		write(KEY_SMOOTH, smooth ? '1' : '0');
+	},
 	reset() {
 		this.setInterp('on'); // 기본 보간
 		this.setBlend(0);
+		this.setSmooth(true); // 기본 스무딩 ON
 	},
 };

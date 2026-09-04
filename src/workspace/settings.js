@@ -55,8 +55,15 @@ const injectStyle = () => {
 
 const paintInterp = () => {
 	if (!el) return;
-	el.querySelectorAll('.sf-seg button').forEach((b) =>
+	el.querySelectorAll('.sf-seg-interp button').forEach((b) =>
 		b.classList.toggle('on', b.dataset.v === renderSettings.interpMode)
+	);
+};
+
+const paintSmooth = () => {
+	if (!el) return;
+	el.querySelectorAll('.sf-seg-smooth button').forEach((b) =>
+		b.classList.toggle('on', (b.dataset.s === 'on') === renderSettings.smooth)
 	);
 };
 
@@ -72,13 +79,21 @@ export const openSettings = () => {
 		<div class="sf-set-b">
 			<div class="sf-set-sec">
 				<div class="sf-set-lab">이동 보간</div>
-				<div class="sf-seg">
+				<div class="sf-seg sf-seg-interp">
 					${INTERP_OPTS.map(
 						(o) => `<button data-v="${o.v}"><b>${o.label}</b><small>${o.desc}</small></button>`
 					).join('')}
 				</div>
 			</div>
-			<div class="sf-set-sec" style="margin-bottom:4px">
+			<div class="sf-set-sec">
+				<div class="sf-set-lab">픽셀 스무딩</div>
+					<div class="sf-seg sf-seg-smooth">
+						<button data-s="on"><b>ON</b><small>에지 부드럽게 · 이동 잔상↓ (기본)</small></button>
+						<button data-s="off"><b>OFF</b><small>픽셀 그대로 · 칼같이 선명</small></button>
+					</div>
+					<div class="sf-set-note">이동 잔상(LCD sample-and-hold)을 공간축으로 마스킹. 픽셀아트 에지가 뭉개진다.</div>
+				</div>
+				<div class="sf-set-sec" style="margin-bottom:4px">
 				<div class="sf-set-lab">모션블러 (LCD 잔상 마스킹)</div>
 				<div class="sf-set-blur">
 					<input type="range" min="0" max="0.8" step="0.05" value="${renderSettings.blendAmount}">
@@ -105,10 +120,17 @@ export const openSettings = () => {
 	back.querySelector('.sf-set-x').addEventListener('click', close);
 	back.querySelector('.sf-set-done').addEventListener('click', close);
 
-	back.querySelectorAll('.sf-seg button').forEach((b) =>
+	back.querySelectorAll('.sf-seg-interp button').forEach((b) =>
 		b.addEventListener('click', () => {
 			renderSettings.setInterp(b.dataset.v);
 			paintInterp();
+		})
+	);
+
+	back.querySelectorAll('.sf-seg-smooth button').forEach((b) =>
+		b.addEventListener('click', () => {
+			renderSettings.setSmooth(b.dataset.s === 'on');
+			paintSmooth();
 		})
 	);
 
@@ -122,10 +144,12 @@ export const openSettings = () => {
 	back.querySelector('.sf-set-reset').addEventListener('click', () => {
 		renderSettings.reset();
 		paintInterp();
+		paintSmooth();
 		range.value = renderSettings.blendAmount;
 		val.textContent = renderSettings.blendAmount.toFixed(2);
 	});
 
 	document.body.appendChild(back);
 	paintInterp();
+	paintSmooth();
 };

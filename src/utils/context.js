@@ -1,5 +1,6 @@
 import { RENDER_SCALE } from '../constants/game.js';
 import { SCENE_HEIGHT, SCENE_WIDTH } from '../constants/stage.js';
+import { renderSettings } from '../state/renderSettings.js';
 
 // 게임 좌표를 디스플레이 픽셀 격자에 스냅한다(1/RENDER_SCALE 게임픽셀 = 1 디스플레이픽셀).
 // 게임픽셀 단위 Math.floor 대신 이걸 쓰면 이동이 RENDER_SCALE 배 곱게 나뉘어 부드럽고,
@@ -36,6 +37,9 @@ export const getContext = () => {
 	canvasEL.width = SCENE_WIDTH * RENDER_SCALE;
 	canvasEL.height = SCENE_HEIGHT * RENDER_SCALE;
 	const context = canvasEL.getContext('2d');
-	context.imageSmoothingEnabled = false; // 픽셀아트: 정수배 확대라도 뭉개지 않게
+	// 픽셀 스무딩 초기값(renderSettings.smooth). 렌더 루프가 매 프레임 재적용해 라이브 토글됨.
+	// 캔버스 업스케일(imageSmoothingEnabled) + CSS 다운스케일(.smooth 클래스) 두 단계 모두 제어.
+	context.imageSmoothingEnabled = renderSettings.smooth;
+	canvasEL.classList.toggle('smooth', renderSettings.smooth);
 	return context;
 };

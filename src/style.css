@@ -31,6 +31,10 @@ canvas{
   image-rendering: pixelated;
   display: block;
 }
+/* 픽셀 스무딩 ON — 4× 백킹 → 화면 다운스케일도 부드럽게(에지 소프트닝, 잔상 마스킹). */
+canvas.smooth{
+  image-rendering: auto;
+}
 
 img{
   display: none;
