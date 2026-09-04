@@ -44,6 +44,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# === 자매 프로젝트 레퍼런스 (심링크 → 로컬 마운트, 커밋 금지) ===
+# 심링크라 git 은 파일로 취급 → 트레일링 슬래시 없이.
+reference
+
 # === 빌드 / 임시 산출물 ===
 dist/
 build/
