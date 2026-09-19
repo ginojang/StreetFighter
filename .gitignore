@@ -25,6 +25,9 @@ deploy.local.*
 # === Claude Code 로컬 설정 ===
 .claude/settings.local.json
 
+# === Codewhale 에이전트 상태 (커밋 금지) ===
+.codewhale/
+
 # === OS 생성 파일 ===
 .DS_Store
 Thumbs.db
