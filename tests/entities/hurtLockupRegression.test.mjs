@@ -4,42 +4,39 @@ import assert from 'node:assert/strict';
 import { reproduce } from '../../scripts/repro_hurt_lockup.mjs';
 
 /**
- * 알려진 버그 캐너리 — (b)단계에서 규명한 히트 등록 잠금 버그.
+ * 히트 등록 잠금 버그 — 수정 적용 후 회귀 테스트.
  *
- * 근본 원인: Fighter.handleAttackHit이 changeState 가드 "이전에"
- * this.opponent.attackStruck = true 를 실행한다. 피격자가 공중(JUMP_UP 등,
- * FighterHurtStates에 없는 상태)이면 HURT 진입이 거부되는데 플래그는 이미
- * 소비됨 → 피격자가 IDLE을 거치지 않는 한 공격자의 모든 후속 공격이
- * updateAttackBoxCollided의 attackStruck early-return으로 미등록된다.
+ * 수정(Fighter.js):
+ *  1. handleAttackInit가 attackStruck를 재무장한다 — 공중 피격(jumpUp → HURT
+ *     거부)으로 소비된 플래그가 다음 공격 시작 시 해제되어, 피격자가 IDLE을
+ *     우회해도 새 공격은 정상 등록된다.
+ *  2. updateAttackBoxCollided 루프의 미겹침 return → continue — HEAD가 아닌
+ *     BODY/LEGS만 겹치는 공격도 등록된다.
  *
- * ⚠ 이 테스트는 버그가 "현재 진단 그대로 존재"함을 고정한다(수정이 아직
- * 승인되지 않음). 수정 적용 시 기대값을 반전(잠금 소멸 방향)하고 이 주석을
- * 지울 것. 승인된 수정 후보: handleAttackInit에서 attackStruck 재무장,
- * updateAttackBoxCollided 루프의 return→continue, 경량 공격 핸들러 교차 배선.
+ * 참고: 공중 피격 자체의 HURT 거부(데미지는 들어가고 전이는 거부)는 상태
+ * 데이터의 설계 그대로 유지된다 — 잠금 없이 데미지만 들어간다.
  */
-test('캐너리: 공중 히트 거부 → attackStruck 잠금이 재현된다 (버그 미수정 상태 고정)', () => {
+test('공중 히트 거부 후에도 다음 공격은 히트를 등록한다 (attackStruck 재무장)', () => {
 	const r = reproduce();
 
-	// Phase 1 — 공중 피격: 데미지는 들어가고 전이는 거부된다
+	// Phase 1 — 공중 피격: 데미지는 들어가고 전이는 여전히 거부(설계 그대로)
 	assert.equal(r.struckInAir, true, '공중에서 onAttackHit 호출(데미지 적용)');
 	assert.equal(r.hitsDuringAirHit, true, '히트 카운터 1');
 	assert.equal(r.illegalMoveLogged, true, 'Illegal move 로그: ' + r.illegal.join('; '));
 	assert.equal(r.bStillAirborne, true, '피격자는 여전히 점프 상태');
-	assert.equal(r.attackStruckAfterAirHit, true, '공격자 attackStruck 갇힘(근본 원인)');
+	assert.equal(r.attackStruckAfterAirHit, true, '거부 직후 플래그는 소비됨(다음 공격 init에서 재무장)');
 
-	// Phase 2 — 잠금: 피격자가 IDLE을 우회하면 새 공격이 전부 무시된다
-	assert.equal(r.bAvoidsIdle, true, '피격자 크라우치로 IDLE 우회');
-	assert.equal(r.locked1, 0, '중공격 겹침에도 히트 0건');
-	assert.equal(r.locked2, 0, '강킥 겹침에도 히트 0건');
-	assert.equal(r.attackStruckStillTrue, true, 'attackStruck 여전히 true');
+	// Phase 2 — 잠금 소멸: 피격자가 IDLE을 우회해도 새 공격마다 등록된다
+	assert.ok(r.locked1 >= 1, '중공격 등록(수정 전 0건 잠금)');
+	assert.ok(r.locked2 >= 1, '강킥 등록(수정 전 0건 잠금)');
 
-	// Phase 3 — 회복: 피격자가 IDLE을 거치면 즉시 해제(jugaad)
+	// Phase 3 — IDLE 경유 해제(jugaad)와 재등록도 여전히 동작
 	assert.equal(r.bReachedIdle, true, '피격자 IDLE 도달');
-	assert.equal(r.attackStruckReleased, true, 'handleIdleInit로 재무장');
+	assert.equal(r.attackStruckReleased, true, 'handleIdleInit로 해제 유지');
 	assert.ok(r.recovered >= 1, '같은 공격이 다시 등록됨');
 
-	// Phase 4 — 별도 버그: BODY/LEGS만 겹치는 공격은 return(≠continue) 때문에 미등록
+	// Phase 4 — BODY만 겹치는 공격도 등록(return→continue)
 	assert.equal(r.rOnlyBody, true, '배치 사각형은 BODY와만 겹침');
-	assert.equal(r.bodyOnlyHits, 0, 'BODY만 겹치면 미등록');
-	assert.equal(r.headControlHits, 1, 'HEAD 겹침(대조)은 등록');
+	assert.ok(r.bodyOnlyHits >= 1, 'BODY-only 히트 등록(수정 전 영구 미스)');
+	assert.equal(r.headControlHits, 1, 'HEAD 겹침(대조)은 1회 등록 — 중복 히트 없음');
 });

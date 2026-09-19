@@ -40,7 +40,11 @@ import { ControlHistory } from '../../engine/ControlHistory.js';
 // [Done] TODO Convert hurt: [[], [], []] to {head:[], body:[], legs:[],}
 // [FIXED]: handleHadoukenInit was being called in Fighter Idle.init TODO BUG: find what makes the hadouken sound call out of noWhere - happens when hitting and after atleast once the Hadouken is thrown
 
-// [Found not fixed] !!TODO One of the fighters randomly stops registering hits - Happens because illegal hurtState - from jumping to hurtHeadBody- jugaad by changing attackStruck in handleIdle
+// [FIXED] fighters randomly stopped registering hits — an air hit (victim in jumpUp) consumed
+//         attackStruck before the changeState guard rejected the HURT transition, locking out all
+//         later attacks until the victim passed IDLE. Fix: handleAttackInit re-arms attackStruck
+//         (each attack instance may strike once); updateAttackBoxCollided now continues past
+//         non-overlapping hurt areas instead of returning (BODY/LEGS-only hits never landed).
 
 //[FIXED] this.opponent.attackStruck = false was missing in handleHeadBodyHit TODO: if fighters move into each other for some time they wont take hits.
 
@@ -665,6 +669,9 @@ export class Fighter {
 	handleAttackInit = (time) => {
 		this.resetVelocities();
 		playSound(this.soundAttacks[this.states[this.currentState].attackStrength]);
+		// 새 공격 인스턴스는 한 번씩 히트를 등록할 수 있어야 한다: 공중 피격 거부로
+		// 갇힌 attackStruck(true)도 다음 공격 시작 시 여기서 재무장된다.
+		this.attackStruck = false;
 	};
 
 	handleLightAttackReset = (time) => {
@@ -842,7 +849,9 @@ export class Fighter {
 				{ x, y, width, height }
 			);
 
-			if (!boxOverlap(actualHitBox, actualOpponentHurtBox)) return;
+			// 해당 부위가 안 겹치면 다음 부위(HEAD→BODY→LEGS)를 계속 검사한다.
+			// 과거의 return는 BODY/LEGS-only 겹침을 영구 미스시켰다.
+			if (!boxOverlap(actualHitBox, actualOpponentHurtBox)) continue;
 
 			const { attackStrength, attackType } = this.states[this.currentState];
 

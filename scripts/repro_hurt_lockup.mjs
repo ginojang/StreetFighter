@@ -1,24 +1,26 @@
 /**
- * [Found not fixed] "한쪽 파이터가 랜덤하게 히트를 등록하지 않는다" 버그의 결정적 재현.
+ * [FIXED] "한쪽 파이터가 랜덤하게 히트를 등록하지 않는다" 버그의 결정적 재현 + 수정 검증.
+ *
+ * 수정(Fighter.js): handleAttackInit가 attackStruck를 재무장(공중 피격 거부로
+ * 갇힌 플래그가 다음 공격 시작 시 해제), updateAttackBoxCollided 루프의
+ * return→continue(BODY/LEGS-only 겹침도 등록).
  *
  * DOM/오디오/Image를 스텁하고 실제 게임 모듈(Ken/Ryu/Fighter 상태머신)을 node에서
  * 그대로 구동한다. 게임 입력은 넷플레이 시임(Netplay seam)인 applyRemoteInput으로
  * 주입한다(원본 파이프라인을 건드리지 않는 주입점).
  *
- * 재현 시나리오:
+ * 시나리오(수정 전 버그 역사):
  *  Phase 1 — 공중 피격: B(Ryu)가 jumpUp인 동안 A(Ken)의 공격이 겹치면 데미지는
  *            들어가지만(onAttackHit 호출) HURT 진입은 validFrom 위반으로 거부된다.
- *            이때 이미 this.opponent.attackStruck = true가 실행된 상태(근본 원인).
- *  Phase 2 — 잠금: B가 착지 후 웅크리기만 하고(IDLE을 거치지 않고) A가 새 공격을
- *            여러 번 겹쳐도 updateAttackBoxCollided가 attackStruck로 early-return
- *            해 한 번도 등록되지 않는다.
- *  Phase 3 — 회복: B가 IDLE을 거치는 순간(handleIdleInit의 jugaad) A.attackStruck가
- *            풀리고 다시 히트가 등록된다.
- *  Phase 4 — 별도 버그: updateAttackBoxCollided 루프의 return(continue여야 함) 때문에
- *            HEAD가 아닌 BODY/LEGS만 겹치는 공격은 상태와 무관하게 영원히 안 맞는다.
+ *            거부와 무관하게 A.attackStruck = true가 이미 소비된다(수정 후에도
+ *            데미지·거부는 동일 — 상태 데이터 설계 그대로).
+ *  Phase 2 — 잠금(수정으로 소멸): B가 착지 후 웅크리기만 해도(IDLE 우회) A의 새
+ *            공격은 init에서 재무장되어 정상 등록된다.
+ *  Phase 3 — IDLE 경유 해제(jugaad)도 여전히 동작한다.
+ *  Phase 4 — BODY/LEGS만 겹치는 공격도 continue 덕에 등록된다.
  *
  * 직접 실행(진단 출력): node scripts/repro_hurt_lockup.mjs
- * 회귀 캐너리: tests/hurtLockupRegression.test.mjs 가 reproduce()를 import 해 사용.
+ * 회귀 캐너리: tests/entities/hurtLockupRegression.test.mjs 가 reproduce()를 import 해 사용.
  */
 
 // ── DOM 스텁 (게임 모듈 import 전에 설치) ────────────────────────────────
@@ -282,6 +284,10 @@ export const reproduce = () => {
 		a.updateAttackBoxCollided(now());
 		const bodyOnlyHits = hits.length - hitsBeforeBody;
 
+		// 대조군: BODY 히트가 같은 공격 인스턴스의 플래그를 소비했으므로,
+		// HEAD 측정은 “새 공격 시작”을 모델링해야 한다 — 실제 수정 경로인
+		// handleAttackInit 재무장을 그대로 호출한다.
+		a.handleAttackInit();
 		const hitsBeforeHead = hits.length;
 		const Rh = {
 			x: headAbs.x + 2,
@@ -343,19 +349,17 @@ if (isDirectRun()) {
 	for (const n of r.notes) console.log(n);
 
 	check('P1: 공중에서 데미지는 들어감(onAttackHit 호출)', r.struckInAir && r.hitsDuringAirHit);
-	check('P1: HURT 진입은 거부됨 — Illegal move 로그 존재', r.illegalMoveLogged);
+	check('P1: HURT 진입은 거부됨 — Illegal move 로그 존재(상태 데이터 설계 그대로)', r.illegalMoveLogged);
 	check('P1: B는 여전히 점프 상태', r.bStillAirborne);
-	check('P1: A.attackStruck가 true로 갇힘(근본 원인)', r.attackStruckAfterAirHit);
-	check('P2: B는 IDLE을 거치지 않음(크라우치 상태)', r.bAvoidsIdle);
-	check('P2: 중공격 — 겹침에도 히트 0건', r.locked1 === 0);
-	check('P2: 강킥 — 겹침에도 히트 0건', r.locked2 === 0);
-	check('P2: A.attackStruck 여전히 true', r.attackStruckStillTrue);
+	check('P1: 거부 직후 A.attackStruck는 소비됨(true) — 다음 공격 init에서 재무장', r.attackStruckAfterAirHit);
+	check('P2(수정): 중공격 — IDLE 우회 중에도 히트 등록', r.locked1 >= 1);
+	check('P2(수정): 강킥 — IDLE 우회 중에도 히트 등록', r.locked2 >= 1);
 	check('P3: B IDLE 도달', r.bReachedIdle);
-	check('P3: A.attackStruck 해제(jugaad: handleIdleInit)', r.attackStruckReleased);
-	check('P3: 같은 중공격이 이제는 히트 등록', r.recovered >= 1);
+	check('P3: IDLE 경유 해제(jugaad: handleIdleInit)도 여전히 동작', r.attackStruckReleased);
+	check('P3: 같은 중공격이 히트 등록', r.recovered >= 1);
 	check('P4 전제: R은 BODY와만 겹침', r.rOnlyBody);
-	check('P4: BODY만 겹치면 히트 미등록(return이 continue여야 함)', r.bodyOnlyHits === 0);
-	check('P4 대조: HEAD 겹침이면 히트 등록', r.headControlHits === 1);
+	check('P4(수정): BODY만 겹쳐도 히트 등록(return→continue)', r.bodyOnlyHits >= 1);
+	check('P4 대조: HEAD 겹침이면 히트 등록 1회(중복 없음)', r.headControlHits === 1);
 
 	console.log('\n=== Illegal move 로그 ===');
 	for (const s of r.illegal) console.log('  ' + s);
