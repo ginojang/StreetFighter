@@ -23,7 +23,7 @@ The game controls are as follows:
 
 - **Movement**:
 
-  - Keyboard: Arrow keys (Left, Right, Up, Down)
+  - Keyboard: WASD keys (W for Up)
   - Gamepad: Left thumbstick
 
 - **Attacks**:
@@ -38,7 +38,7 @@ The game controls are as follows:
 
 - **Movement**:
 
-  - Keyboard: WASD keys (W for Up)
+  - Keyboard: Arrow keys (Left, Right, Up, Down)
   - Gamepad: Left thumbstick
 
 - **Attacks**:
