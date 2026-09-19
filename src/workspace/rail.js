@@ -5,8 +5,9 @@
 // base href 가 /street_fighter/ 라 `./${query}` 는 항상 게임 루트 기준으로 풀린다.
 
 import { openSettings } from './settings.js';
+import { openMoves } from './moves.js';
 
-const ACTIONS = { settings: openSettings };
+const ACTIONS = { settings: openSettings, moves: openMoves };
 
 const WORKSPACES = [
 	{ id: 'game', label: '게임', icon: '🎮', query: '', group: 'play' },
@@ -22,6 +23,7 @@ const WORKSPACES = [
 	// 툴 — 별도 페이지(page) 또는 액션(action). 게임 모드(query)와 다름.
 	{ id: 'sprite', label: '스프라이트 툴', icon: '🎞️', page: 'sprite-editor.html', group: 'tools' },
 	{ id: 'settings', label: '렌더 세팅', icon: '⚙️', action: 'settings', group: 'tools' },
+	{ id: 'moves', label: '기술 목록', icon: '🧾', action: 'moves', group: 'tools' },
 ];
 
 const GROUPS = [

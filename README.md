@@ -12,6 +12,9 @@ This project is a simple Street Fighter game implemented using JavaScript and HT
 
 ## Game Controls
 
+> **전체 기술 목록** (데미지·탄속·경직 등 프레임 데이터): [docs/moves.md](docs/moves.md)
+> 게임 내에서는 왼쪽 워크스페이스 레일의 **🧾 기술 목록** 패널에서도 확인할 수 있습니다.
+
 The game controls are as follows:
 
 ![Controls](public/images/Controls.png)
